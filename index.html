@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#17264d">
+  <meta name="description" content="Starcast — a stargazing-conditions dashboard. Is it good to stargaze at your location tonight?">
+  <title>Starcast — Is it good to stargaze tonight?</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='12'%20fill='%230c1428'/%3E%3Cpath%20d='M32%2010l5.5%2013.5L52%2025l-11%209.5L44.5%2049%2032%2041l-12.5%208L23%2034.5%2012%2025l14.5-1.5z'%20fill='%23f2f5fa'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body class="loading">
+  <canvas id="stars" aria-hidden="true"></canvas>
+
+  <div class="app">
+    <header>
+      <div class="bar">
+        <span class="logo" aria-hidden="true">🔭</span>
+        <h1>Starcast<sup class="beta">beta</sup></h1>
+        <button id="share-btn" class="icon-btn" aria-label="Share Starcast" title="Share">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <!-- ============ CONDITIONS ============ -->
+      <section id="view-conditions" class="view">
+        <div id="notice" class="notice hidden">
+          <span id="notice-text"></span>
+          <button id="notice-close" aria-label="Dismiss notice">×</button>
+        </div>
+
+        <div id="banner" class="banner">
+          <span id="live-ribbon" class="ribbon hidden">LIVE</span>
+          <div id="verdict" class="verdict-text">Loading forecast…</div>
+          <div id="verdict-sub" class="verdict-sub">Checking the sky above you</div>
+        </div>
+
+        <div id="tile-grid" class="grid">
+          <div class="tile" id="tile-weather"><div class="t-label">Weather</div><div class="t-value t-icon"></div><div class="t-sub"></div></div>
+          <div class="tile" id="tile-suntimes"><div class="t-label">Sun Times</div><div class="t-value t-sun"><div class="sunrow">↑ —</div><div class="sunrow">↓ —</div></div><div class="t-sub"></div></div>
+          <div class="tile" id="tile-visibility"><div class="t-label">Visibility</div><div class="t-value">—</div><div class="t-sub"></div></div>
+
+          <div class="tile" id="tile-windchill"><div class="t-label">Wind Chill</div><div class="t-value">—</div><div class="t-sub"></div></div>
+          <div class="tile" id="tile-wind"><div class="t-label">Wind</div><div class="t-value">—</div><div class="t-sub"></div></div>
+          <div class="tile" id="tile-precip"><div class="t-label">Precip Prob</div><div class="t-value">—</div><div class="t-sub"></div></div>
+
+          <div class="tile" id="tile-cloud"><div class="t-label">Cloud Cover</div><div class="t-value">—</div><div class="t-sub"></div></div>
+          <div class="tile" id="tile-seeing"><div class="t-label">Seeing</div><div class="t-value">—</div><div class="t-sub"></div></div>
+          <div class="tile" id="tile-transparency"><div class="t-label">Transparency</div><div class="t-value">—</div><div class="t-sub"></div></div>
+
+          <div class="tile" id="tile-moon"><div class="t-label">Moon</div><div class="t-value t-moon"><span class="moon-gfx"></span><span class="moon-pct">—</span></div><div class="t-sub"></div></div>
+          <div class="tile" id="tile-planets"><div class="t-label">Planets</div><div class="t-value">—</div><div class="t-sub"></div></div>
+          <div class="tile" id="tile-bortle"><span class="pencil" aria-hidden="true">✎</span><div class="t-label">Light Pollution</div><div class="t-value">—</div><div class="t-sub">Bortle</div></div>
+        </div>
+
+        <div class="timeline-head"><span id="timeline-label">▾ —</span></div>
+        <div id="timeline-strip" class="strip" role="slider" aria-label="Hour of day" aria-valuemin="0" aria-valuemax="23" tabindex="0">
+          <div id="playhead" class="playhead hidden"><div class="grab"></div></div>
+        </div>
+        <div id="day-tabs" class="day-tabs" role="tablist"></div>
+      </section>
+
+      <!-- ============ ERROR ============ -->
+      <section id="view-error" class="view hidden">
+        <div class="error-box">
+          <div class="error-emoji" aria-hidden="true">☁️</div>
+          <h2>Couldn't reach the forecast service</h2>
+          <p class="dim">Check your connection and try again. Starcast needs Open-Meteo to know what the sky is doing.</p>
+          <button id="retry-btn" class="btn btn-accent">Retry</button>
+        </div>
+      </section>
+
+      <!-- ============ CHARTS ============ -->
+      <section id="view-charts" class="view hidden">
+        <div class="panel"><h3 id="chart-cloud-title">Cloud Cover (%)</h3><div class="chart" id="chart-cloud"></div></div>
+        <div class="panel"><h3 id="chart-temp-title">Temperature (°F)</h3><div class="chart" id="chart-temp"></div></div>
+        <div class="panel"><h3 id="chart-wind-title">Wind (mph)</h3><div class="chart" id="chart-wind"></div></div>
+      </section>
+
+      <!-- ============ SETTINGS ============ -->
+      <section id="view-settings" class="view hidden">
+        <div class="panel" id="card-location">
+          <h3>Location</h3>
+          <div class="loc-row">
+            <div>
+              <div id="loc-name">—</div>
+              <div id="loc-coords" class="dim">—</div>
+            </div>
+            <button id="btn-geoloc" class="btn">Use my location</button>
+          </div>
+          <input id="city-search" type="search" placeholder="Search for a city…" autocomplete="off" spellcheck="false">
+          <ul id="search-results" class="results"></ul>
+        </div>
+
+        <div class="panel" id="card-bortle">
+          <h3>Light Pollution</h3>
+          <div id="bortle-chips" class="chips">
+            <button class="chip" data-bortle="1">1</button>
+            <button class="chip" data-bortle="2">2</button>
+            <button class="chip" data-bortle="3">3</button>
+            <button class="chip" data-bortle="4">4</button>
+            <button class="chip" data-bortle="5">5</button>
+            <button class="chip" data-bortle="6">6</button>
+            <button class="chip" data-bortle="7">7</button>
+            <button class="chip" data-bortle="8">8</button>
+            <button class="chip" data-bortle="9">9</button>
+          </div>
+          <p class="dim caption">1 = pristine dark sky · 9 = inner city</p>
+        </div>
+
+        <div class="panel" id="card-units">
+          <h3>Units</h3>
+          <div class="segmented">
+            <button id="unit-imperial" class="seg-btn" data-units="imperial">°F / mph</button>
+            <button id="unit-metric" class="seg-btn" data-units="metric">°C / km/h</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>About</h3>
+          <p class="dim">Weather data by <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> · Seeing &amp; transparency by <a href="https://www.7timer.info" target="_blank" rel="noopener">7Timer!</a></p>
+          <p class="dim">Inspired by the iOS app Good To Stargaze. Not affiliated.</p>
+        </div>
+      </section>
+
+      <!-- ============ HELP ============ -->
+      <section id="view-help" class="view hidden">
+        <div class="panel">
+          <h3>How Starcast works</h3>
+          <p class="help-p">Starcast blends the hourly weather forecast, the sun and moon's computed positions, and your local light pollution into a single 0–1 stargazing score for every hour of the next two weeks. Pick a day, scrub to an hour, and every tile updates to that exact moment.</p>
+        </div>
+        <div class="panel">
+          <h3>The verdict &amp; tiles</h3>
+          <dl class="help-dl">
+            <dt>Verdict banner</dt>
+            <dd>A weighted blend of every metric below (cloud cover counts most at 30%, darkness 20%, precipitation 12%, moon 10%, and so on). Score ≥ 0.66 is "Good To Stargaze", 0.33–0.66 is "Marginal Stargazing", below 0.33 is "Not Good To Stargaze". Hard caps: daylight caps the score at 0.25, ≥ 90% cloud caps it at 0.20, and ≥ 70% precipitation probability caps it at 0.25 — it is never "Good" while the sun is up or the sky is socked in.</dd>
+            <dt>Weather</dt>
+            <dd>The forecast condition icon. Clear skies score 1.0 (green), partly cloudy 0.6 (olive), overcast 0.2 (red), and any fog, drizzle, rain, or snow scores 0.0 (red).</dd>
+            <dt>Sun Times</dt>
+            <dd>Sunrise and sunset for the selected day, straight from Open-Meteo. Informational only — this tile is always olive and never affects the score.</dd>
+            <dt>Visibility</dt>
+            <dd>Surface visibility. 10 miles or more scores 1.0, falling linearly to 0.0 at 2 miles — green above ≈ 7.3 mi, red below ≈ 4.6 mi.</dd>
+            <dt>Wind Chill</dt>
+            <dd>Feels-like temperature, purely a comfort metric. 32–75 °F scores a full 1.0; it falls linearly to 0.0 at 0 °F on the cold side and 100 °F on the hot side.</dd>
+            <dt>Wind</dt>
+            <dd>Wind steadies both you and your telescope. ≤ 5 mph scores 1.0, ≥ 25 mph scores 0.0 — green below ≈ 12 mph, red above ≈ 18 mph.</dd>
+            <dt>Precip Prob</dt>
+            <dd>Chance of precipitation. 0% scores 1.0, ≥ 60% scores 0.0 — green below ≈ 20%, red above ≈ 40%. At ≥ 70% the overall verdict is capped at "Not Good".</dd>
+            <dt>Cloud Cover</dt>
+            <dd>Total cloud cover, the heaviest-weighted metric. 0% scores 1.0, ≥ 80% scores 0.0 — green below ≈ 27%, red above ≈ 53%. The sub-line breaks out Low/Mid/High cloud layers.</dd>
+            <dt>Seeing</dt>
+            <dd>Atmospheric steadiness from 7Timer's ASTRO model, remapped to 0–1 (higher is better): green ≥ 0.66, red &lt; 0.33. A tiny "est." marks hours beyond 7Timer's ~72-hour range, where Starcast estimates it from cloud and wind instead.</dd>
+            <dt>Transparency</dt>
+            <dd>How crisp and dark the sky itself is (haze, moisture, high cloud), also from 7Timer on the same 0–1 scale and thresholds, with the same "est." fallback based on humidity and high cloud.</dd>
+            <dt>Moon</dt>
+            <dd>Illuminated fraction of the moon, computed on-device. If the moon is below the horizon at the selected hour it scores a perfect 1.0 no matter the phase; while it's up, the score is 1 − illumination — green ≤ 34% illuminated, red ≥ 67%.</dd>
+            <dt>Planets</dt>
+            <dd>Which bright planets (Me V Ma J S) are more than 5° above your horizon at the selected hour, from on-device orbital mechanics. Green when 2+ are up, olive for 1, red for none. Doesn't affect the overall score.</dd>
+            <dt>Light Pollution</dt>
+            <dd>Your Bortle class, set by you (tap this tile or use Settings). Bortle ≤ 2 scores 1.0, ≥ 8 scores 0.0 — green up to Bortle 4, olive 5–6, red 7+.</dd>
+          </dl>
+        </div>
+        <div class="panel">
+          <h3>Color legend</h3>
+          <table class="legend">
+            <tr><td class="sw band-good"></td><td>Good — score ≥ 0.66</td></tr>
+            <tr><td class="sw band-marginal"></td><td>Marginal — score 0.33 to 0.66</td></tr>
+            <tr><td class="sw band-bad"></td><td>Poor — score &lt; 0.33</td></tr>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <nav>
+      <div class="bar">
+        <a href="#/" class="nav-item" data-route="conditions">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l2.6 6.3 6.8.55-5.2 4.45 1.6 6.65L12 16.9l-5.8 3.55 1.6-6.65-5.2-4.45 6.8-.55z"/></svg>
+          <span>Conditions</span>
+        </a>
+        <a href="#/charts" class="nav-item" data-route="charts">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,17 9,10 13,13.5 21,5"/><polyline points="15,5 21,5 21,11"/></svg>
+          <span>Charts</span>
+        </a>
+        <a href="#/settings" class="nav-item" data-route="settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg>
+          <span>Settings</span>
+        </a>
+        <a href="#/help" class="nav-item" data-route="help">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.6a2.4 2.4 0 1 1 3.5 2.1c-.7.4-1.1.8-1.1 1.8"/><circle cx="12" cy="16.8" r=".4" fill="currentColor"/></svg>
+          <span>Help</span>
+        </a>
+      </div>
+    </nav>
+  </div>
+
+  <noscript>
+    <div style="position:fixed;inset:0;background:#0c1428;color:#f2f5fa;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;font-family:sans-serif;z-index:99;">
+      Starcast needs JavaScript to fetch the forecast and compute the sky. Please enable it.
+    </div>
+  </noscript>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
