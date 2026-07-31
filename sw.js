@@ -7,7 +7,7 @@
 // NOTE FOR DEPLOYS: bump VERSION whenever app files change, so clients
 // drop the old precache on their next visit.
 
-const VERSION = 'starcast-v3';
+const VERSION = 'starcast-v4';
 const DATA_CACHE = `${VERSION}-data`;
 
 const SHELL = [
@@ -20,6 +20,7 @@ const SHELL = [
   './js/astro.js',
   './js/score.js',
   './js/lightpollution.js',
+  './js/tonight.js',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
@@ -69,9 +70,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.hostname === 'api.open-meteo.com' || url.hostname === 'geocoding-api.open-meteo.com') {
+  if (url.hostname === 'api.open-meteo.com'
+      || url.hostname === 'geocoding-api.open-meteo.com'
+      || url.hostname === 'air-quality-api.open-meteo.com') {
     // Forecast data: network-first, falling back to the last good response
-    // so the app still renders offline.
+    // so the app still renders offline. Fallbacks get a marker header so
+    // the UI can disclose that it's showing saved data.
     event.respondWith(
       fetch(req)
         .then((res) => {
@@ -81,7 +85,13 @@ self.addEventListener('fetch', (event) => {
           }
           return res;
         })
-        .catch(() => caches.match(req))
+        .catch(async () => {
+          const cached = await caches.match(req);
+          if (!cached) return Response.error();
+          const headers = new Headers(cached.headers);
+          headers.set('X-Starcast-Cache', '1');
+          return new Response(await cached.blob(), { status: cached.status, headers });
+        })
     );
     return;
   }

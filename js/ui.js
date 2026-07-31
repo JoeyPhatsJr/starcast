@@ -5,7 +5,8 @@
 // nodes, so scrubbing the timeline stays cheap. Only day switches and data
 // refreshes rebuild nodes (segments, tabs, charts).
 
-import { scoreMetric, verdict, band } from './score.js';
+import { scoreMetric, verdict, band, WEIGHTS } from './score.js';
+import { activeShowers, milkyWayPeak, phaseName, kpNeeded } from './tonight.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -278,7 +279,7 @@ export function renderTiles(state) {
     setTileBand(t.root, scoreMetric('moon', null, ctx));
     t.value.querySelector('.moon-gfx').innerHTML = moonSVG(h.moonIllum, h.moonWaxing);
     t.value.querySelector('.moon-pct').textContent = `${Math.round(h.moonIllum * 100)}%`;
-    t.sub.textContent = h.moonAlt < 0 ? 'Below horizon' : h.moonWaxing ? 'Waxing' : 'Waning';
+    t.sub.textContent = h.moonAlt < 0 ? 'Below horizon' : phaseName(h.moonIllum, h.moonWaxing);
   }
 
   // Planets — green 2+, olive 1, red 0 (informational; not in overall score)
@@ -837,6 +838,238 @@ export function flashBortleCard() {
   card.classList.remove('flash');
   void card.offsetWidth; // restart the animation
   card.classList.add('flash');
+}
+
+/* ================= Tonight's sky panel ================= */
+
+function fmtMonthDay(ms, tz) {
+  return fmt(tz, { month: 'short', day: 'numeric' }).format(ms);
+}
+
+export function renderTonight(state) {
+  const body = $('tonight-body');
+  if (!state.days.length) { body.textContent = ''; return; }
+  const tz = state.prefs.tz;
+  const { lat } = state.prefs;
+  const day = state.days[state.selectedDay];
+  const firstTime = state.hours[day.hourIndices[0]].time;
+  $('tonight-title').textContent = day.isToday
+    ? "Tonight's sky"
+    : `Night of ${fmtMonthDay(firstTime, tz)}`;
+
+  const rows = []; // { ic, text, cls? }
+  const night = nightHours(state, state.selectedDay);
+
+  // Moon phase + upcoming lunations
+  const midnightish = night[Math.floor(night.length / 2)] || state.hours[day.hourIndices[0]];
+  rows.push({
+    ic: '🌙',
+    text: `${phaseName(midnightish.moonIllum, midnightish.moonWaxing)} · ${Math.round(midnightish.moonIllum * 100)}% lit`,
+  });
+  if (state.lunations && state.lunations.length) {
+    const nextNew = state.lunations.find((l) => l.type === 'new');
+    const nextFull = state.lunations.find((l) => l.type === 'full');
+    const bits = [];
+    if (nextNew) bits.push(`New moon ${fmtMonthDay(nextNew.time, tz)}`);
+    if (nextFull) bits.push(`full ${fmtMonthDay(nextFull.time, tz)}`);
+    rows.push({ ic: '🌑', text: bits.join(' · ') });
+  }
+
+  // Milky Way core
+  if (night.length) {
+    const mw = milkyWayPeak(night.map((h) => h.time), lat, state.prefs.lon);
+    if (mw && mw.alt >= 20) {
+      rows.push({ ic: '✨', text: `Milky Way core up to ${Math.round(mw.alt)}° around ${fmtTime(mw.time, tz)}`, cls: 'tn-good' });
+    } else if (mw && mw.alt >= 8) {
+      rows.push({ ic: '✨', text: `Milky Way core stays low (${Math.round(mw.alt)}° around ${fmtTime(mw.time, tz)})` });
+    } else {
+      rows.push({ ic: '✨', text: 'Milky Way core not visible this night' });
+    }
+  }
+
+  // Active meteor showers (top two by ZHR)
+  const iso = fmtISODate(firstTime, tz);
+  const showers = activeShowers(Number(iso.slice(5, 7)), Number(iso.slice(8, 10))).slice(0, 2);
+  for (const s of showers) {
+    const peakDate = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' })
+      .format(Date.UTC(2024, s.peak[0] - 1, s.peak[1])); // year irrelevant for a month-day label
+    const moonNote = midnightish.moonIllum > 0.6 ? ' · moonlight interferes' : '';
+    rows.push({
+      ic: '☄️',
+      text: s.atPeak
+        ? `${s.name} peaking now — up to ${s.zhr}/hr${moonNote}`
+        : `${s.name} active (ZHR ${s.zhr}, peak ${peakDate})${moonNote}`,
+      cls: s.atPeak ? 'tn-good' : '',
+    });
+  }
+
+  // Aurora outlook (only when meaningful for the latitude)
+  if (state.kp) {
+    const needed = kpNeeded(lat);
+    if (state.kp.maxKp >= needed) {
+      rows.push({ ic: '🌌', text: `Aurora possible — Kp ${state.kp.maxKp.toFixed(1)} forecast`, cls: 'tn-good' });
+    } else if (Math.abs(lat) >= 48) {
+      rows.push({ ic: '🌌', text: `Aurora unlikely (Kp ${state.kp.maxKp.toFixed(1)}, needs ${needed}+)` });
+    }
+  }
+
+  // Forecast-model agreement over the night's cloud cover
+  const spreads = night.map((h) => h.cloudSpread).filter((v) => v != null);
+  if (spreads.length) {
+    const avg = Math.round(spreads.reduce((a, b) => a + b, 0) / spreads.length);
+    if (avg >= 25) {
+      rows.push({ ic: '⚠️', text: `Cloud models disagree by ±${avg}% — low confidence`, cls: 'tn-warn' });
+    } else {
+      rows.push({ ic: '✔︎', text: `Cloud models agree (±${avg}%)` });
+    }
+  }
+
+  body.textContent = '';
+  for (const r of rows) {
+    const div = document.createElement('div');
+    div.className = `tn-row${r.cls ? ' ' + r.cls : ''}`;
+    const ic = document.createElement('span');
+    ic.className = 'tn-ic';
+    ic.textContent = r.ic;
+    const tx = document.createElement('span');
+    tx.textContent = r.text;
+    div.append(ic, tx);
+    body.appendChild(div);
+  }
+}
+
+/* ================= Score breakdown ================= */
+
+const METRIC_INFO = [
+  { key: 'cloud', label: 'Cloud cover' },
+  { key: 'darkness', label: 'Darkness' },
+  { key: 'precip', label: 'Precipitation' },
+  { key: 'moon', label: 'Moon' },
+  { key: 'transparency', label: 'Transparency' },
+  { key: 'seeing', label: 'Seeing' },
+  { key: 'wind', label: 'Wind' },
+  { key: 'visibility', label: 'Visibility' },
+  { key: 'lightPollution', label: 'Light pollution' },
+  { key: 'windChill', label: 'Comfort' },
+];
+
+export function renderBreakdown(state) {
+  const h = getSelectedHour(state);
+  const body = $('breakdown-body');
+  if (!h) { body.textContent = ''; return; }
+  const ctx = {
+    bortle: state.prefs.bortle,
+    moonAltitude: h.moonAlt,
+    sunAltitude: h.sunAlt,
+    moonIllum: h.moonIllum,
+  };
+  const valueOf = {
+    cloud: h.cloud, precip: h.precipProb, wind: h.windMph, visibility: h.visMiles,
+    seeing: h.seeing, transparency: h.transparency, lightPollution: ctx.bortle,
+    windChill: h.apparentF, darkness: null, moon: null,
+  };
+
+  body.textContent = '';
+  for (const m of METRIC_INFO) {
+    const score = scoreMetric(m.key, valueOf[m.key], ctx);
+    const weight = WEIGHTS[m.key];
+    const row = document.createElement('div');
+    row.className = 'bd-row';
+    const label = document.createElement('span');
+    label.className = 'bd-label';
+    label.textContent = m.label;
+    const track = document.createElement('div');
+    track.className = 'bd-track';
+    // Track width encodes the metric's weight; fill encodes its score.
+    track.style.width = `${Math.round(weight / 0.30 * 100)}px`;
+    const fill = document.createElement('i');
+    fill.className = `bd-fill band-${band(score)}`;
+    fill.style.width = `${Math.round(score * 100)}%`;
+    track.appendChild(fill);
+    const val = document.createElement('span');
+    val.className = 'bd-val';
+    val.textContent = `${(score * weight).toFixed(2)} / ${weight.toFixed(2)}`;
+    row.append(label, track, val);
+    body.appendChild(row);
+  }
+
+  const caps = [];
+  if (h.sunAlt > 0) caps.push('daylight caps the score at 0.25');
+  if (h.cloud >= 90) caps.push('≥90% cloud caps it at 0.20');
+  if (h.precipProb >= 70) caps.push('≥70% precip caps it at 0.25');
+  if (caps.length) {
+    const note = document.createElement('p');
+    note.className = 'bd-note dim';
+    note.textContent = `Hard override: ${caps.join('; ')}.`;
+    body.appendChild(note);
+  }
+}
+
+export function toggleBreakdown(state) {
+  const el = $('breakdown');
+  const opening = el.classList.contains('hidden');
+  el.classList.toggle('hidden');
+  if (opening) renderBreakdown(state);
+}
+
+export function isBreakdownOpen() {
+  return !$('breakdown').classList.contains('hidden');
+}
+
+/* ================= Data age / offline ================= */
+
+export function renderDataAge(state) {
+  const el = $('data-age');
+  if (!state.lastFetch) { el.textContent = ''; return; }
+  const tz = state.prefs.tz;
+  const ageMs = Date.now() - state.lastFetch;
+  const stale = state.offlineData || ageMs > 2 * 3600000;
+  el.textContent = `${state.offlineData ? '⚠ offline · ' : ''}Updated ${fmtTime(state.lastFetch, tz)}`;
+  el.classList.toggle('stale', stale);
+}
+
+/* ================= Saved locations ================= */
+
+export function renderSavedLocations(state) {
+  const ul = $('saved-locs');
+  ul.textContent = '';
+  const saved = state.prefs.saved || [];
+  for (const [i, loc] of saved.entries()) {
+    const li = document.createElement('li');
+    li.dataset.idx = String(i);
+    const isCurrent =
+      Math.abs(loc.lat - state.prefs.lat) < 0.005 && Math.abs(loc.lon - state.prefs.lon) < 0.005;
+    li.className = isCurrent ? 'current' : '';
+    const name = document.createElement('span');
+    name.textContent = `${isCurrent ? '● ' : ''}${loc.name}`;
+    const sub = document.createElement('span');
+    sub.className = 'sub';
+    sub.textContent = `${loc.lat.toFixed(2)}, ${loc.lon.toFixed(2)}`;
+    const del = document.createElement('button');
+    del.className = 'loc-del';
+    del.dataset.del = String(i);
+    del.setAttribute('aria-label', `Remove ${loc.name}`);
+    del.textContent = '×';
+    li.append(name, sub, del);
+    ul.appendChild(li);
+  }
+}
+
+/* ================= Appearance ================= */
+
+export function applyAppearance(state) {
+  document.body.classList.toggle('night', !!state.prefs.night);
+  document.body.classList.toggle('cb', !!state.prefs.cb);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = state.prefs.night ? '#170404' : '#17264d';
+  const nightBtn = $('night-btn');
+  nightBtn.setAttribute('aria-pressed', String(!!state.prefs.night));
+  const tn = $('toggle-night');
+  const tc = $('toggle-cb');
+  tn.classList.toggle('on', !!state.prefs.night);
+  tn.setAttribute('aria-checked', String(!!state.prefs.night));
+  tc.classList.toggle('on', !!state.prefs.cb);
+  tc.setAttribute('aria-checked', String(!!state.prefs.cb));
 }
 
 /* ================= Shell state ================= */

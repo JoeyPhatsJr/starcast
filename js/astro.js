@@ -113,6 +113,44 @@ export function moonIllumination(date) {
 }
 
 /**
+ * Upcoming new and full moons within `days` of `startDate`, by scanning the
+ * sun–moon elongation for 0°/180° crossings (hourly scan + bisection to
+ * ~1 minute). Returns [{ type: 'new'|'full', time }] in chronological order.
+ */
+export function nextLunations(startDate, days = 45) {
+  const elong = (ms) => {
+    const jd = julianDate(new Date(ms));
+    const { lam } = moonEcliptic(jd);
+    return norm360(lam - sunEclipticLongitude(jd));
+  };
+  const out = [];
+  const step = 3600000;
+  const startMs = startDate.getTime();
+  let prev = elong(startMs);
+  for (let t = startMs + step; t <= startMs + days * 86400000; t += step) {
+    const cur = elong(t);
+    // New moon: elongation wraps 360→0. Full moon: crosses 180 rising.
+    const wrapped = cur < prev; // decreasing means we passed 0 (elongation only grows ~0.5°/h)
+    const crossedFull = prev < 180 && cur >= 180;
+    if (wrapped || crossedFull) {
+      const target = wrapped ? 0 : 180;
+      let lo = t - step;
+      let hi = t;
+      for (let i = 0; i < 10; i++) {
+        const mid = (lo + hi) / 2;
+        const e = elong(mid);
+        const passed = wrapped ? e < prev && e < 90 : e >= target;
+        if (passed) hi = mid;
+        else lo = mid;
+      }
+      out.push({ type: wrapped ? 'new' : 'full', time: (lo + hi) / 2 });
+    }
+    prev = cur;
+  }
+  return out;
+}
+
+/**
  * Find the times inside [startMs, endMs] where an altitude function crosses
  * `threshold` degrees. Scans in `stepMinutes` strides, then bisects each
  * bracket down to ~½-minute precision. Returns [{ time, rising }] in order.

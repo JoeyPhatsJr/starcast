@@ -42,7 +42,11 @@ export async function fetchOpenMeteo(lat, lon, units) {
   });
   const res = await fetch(`${OM_FORECAST}?${params}`);
   if (!res.ok) throw new Error(`Open-Meteo HTTP ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  // The service worker stamps cache-fallback responses so the UI can say
+  // "offline — showing your last saved forecast" instead of lying.
+  data._fromCache = res.headers.get('X-Starcast-Cache') === '1';
+  return data;
 }
 
 /** Null-safe array read with a fallback for the rare gaps at range edges. */
@@ -158,9 +162,70 @@ export function heuristicSeeing(hour) {
   return Math.max(0, Math.min(1, 1 - hour.cloud / 100 - hour.windMph / 60));
 }
 
-/** Heuristic transparency when 7Timer is unavailable or out of range. */
+/**
+ * Heuristic transparency when 7Timer is unavailable or out of range.
+ * With measured aerosol optical depth (hour.aod, from the air-quality API)
+ * the estimate is substantially better than the humidity proxy: AOD is the
+ * actual physical quantity behind hazy-but-cloudless skies. AOD ~0.05 is
+ * pristine, ~0.3 is noticeably hazy, ~0.6 is smoke/dust.
+ */
 export function heuristicTransparency(hour) {
+  if (hour.aod != null) {
+    return Math.max(0, Math.min(1, 1 - hour.aod * 1.5 - hour.cloudHigh / 200 - hour.humidity / 400));
+  }
   return Math.max(0, Math.min(1, 1 - hour.humidity / 120 - hour.cloudHigh / 150));
+}
+
+/**
+ * Aerosol optical depth forecast (CAMS via Open-Meteo's air-quality API,
+ * keyless + CORS). Returns a Map of epoch-ms → AOD. ~5-day horizon.
+ */
+export async function fetchAirQuality(lat, lon) {
+  const params = new URLSearchParams({
+    latitude: lat,
+    longitude: lon,
+    hourly: 'aerosol_optical_depth',
+    forecast_days: '7',
+    timeformat: 'unixtime',
+    timezone: 'auto',
+  });
+  const res = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?${params}`);
+  if (!res.ok) throw new Error(`Air quality HTTP ${res.status}`);
+  const data = await res.json();
+  const map = new Map();
+  (data.hourly?.time || []).forEach((t, i) => {
+    const v = data.hourly.aerosol_optical_depth?.[i];
+    if (v != null) map.set(t * 1000, v);
+  });
+  return map;
+}
+
+/**
+ * Cloud cover from three independent models (GFS / ICON / ECMWF) so the UI
+ * can show forecast confidence: when the models disagree wildly, tonight's
+ * cloud number deserves skepticism. Returns Map of epoch-ms → spread (max−min, %).
+ */
+export async function fetchCloudModels(lat, lon) {
+  const params = new URLSearchParams({
+    latitude: lat,
+    longitude: lon,
+    hourly: 'cloud_cover',
+    models: 'gfs_seamless,icon_seamless,ecmwf_ifs025',
+    forecast_days: '14',
+    timeformat: 'unixtime',
+    timezone: 'auto',
+  });
+  const res = await fetch(`${OM_FORECAST}?${params}`);
+  if (!res.ok) throw new Error(`Model comparison HTTP ${res.status}`);
+  const data = await res.json();
+  const h = data.hourly || {};
+  const keys = Object.keys(h).filter((k) => k.startsWith('cloud_cover'));
+  const map = new Map();
+  (h.time || []).forEach((t, i) => {
+    const vals = keys.map((k) => h[k][i]).filter((v) => v != null);
+    if (vals.length >= 2) map.set(t * 1000, Math.max(...vals) - Math.min(...vals));
+  });
+  return map;
 }
 
 /** City search via Open-Meteo's geocoder. Returns up to 5 candidates. */

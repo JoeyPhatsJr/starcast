@@ -183,8 +183,16 @@ main {
   font-weight: 800;
   letter-spacing: -0.2px;
   text-align: center;
-  color: #fff;
+  color: var(--text);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.banner { cursor: pointer; }
+.info-hint {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 13px;
+  opacity: 0.55;
 }
 .verdict-sub {
   position: relative;
@@ -239,7 +247,7 @@ main {
   gap: 5px;
   transform: rotate(-8deg);
   background: var(--accent);
-  color: #fff;
+  color: var(--text);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 1.2px;
@@ -389,7 +397,7 @@ main {
   bottom: 0;
   width: 2px;
   margin-left: -1px;
-  background: #fff;
+  background: var(--text);
   box-shadow: 0 0 7px rgba(255, 255, 255, 0.75);
   pointer-events: none;
   z-index: 1;
@@ -401,7 +409,7 @@ main {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--text);
   transform: translate(-50%, -50%);
   box-shadow: 0 0 7px rgba(255, 255, 255, 0.9), 0 1px 3px rgba(0, 0, 0, 0.5);
 }
@@ -453,9 +461,9 @@ main {
   margin-top: 3px;
   opacity: 0.9;
 }
-.dt-dot.band-good { background: #55a557; box-shadow: 0 0 5px rgba(85, 165, 87, 0.7); }
-.dt-dot.band-marginal { background: #a89f43; }
-.dt-dot.band-bad { background: #a34a4a; }
+.dt-dot.band-good { background: var(--good); box-shadow: 0 0 5px rgba(85, 165, 87, 0.5); filter: brightness(1.35); }
+.dt-dot.band-marginal { background: var(--marginal); filter: brightness(1.2); }
+.dt-dot.band-bad { background: var(--bad); }
 
 /* ---------- Panels (charts / settings / help) ---------- */
 .panel {
@@ -593,7 +601,7 @@ main {
   font-size: 8.5px;
   font-weight: 600;
   text-align: center;
-  color: #fff;
+  color: var(--text);
   border-radius: 2.5px;
   font-variant-numeric: tabular-nums;
 }
@@ -608,7 +616,7 @@ main {
   font-weight: 500;
 }
 .fc-hours td.fc-nowhdr {
-  color: #fff;
+  color: var(--text);
   background: var(--accent);
   border-radius: 3px;
   font-weight: 700;
@@ -639,9 +647,9 @@ main {
 .btn:hover { filter: brightness(1.1); }
 .btn:active { filter: brightness(0.92); }
 .btn-accent {
-  background: linear-gradient(160deg, #5c9af0 0%, #3f7cd6 100%);
+  background: linear-gradient(160deg, var(--accent-hi, #5c9af0) 0%, var(--accent-lo, #3f7cd6) 100%);
   border-color: rgba(255, 255, 255, 0.25);
-  color: #fff;
+  color: var(--text);
 }
 #city-search {
   width: 100%;
@@ -692,7 +700,7 @@ main {
 .chip:hover { filter: brightness(1.15); }
 .chip:active { transform: scale(0.94); }
 .chip.selected {
-  color: #fff;
+  color: var(--text);
   border-color: rgba(255, 255, 255, 0.35);
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12), 0 2px 8px rgba(0, 0, 0, 0.35);
 }
@@ -701,8 +709,8 @@ main {
 .chip.selected.band-bad { background: var(--grad-bad); }
 .chip-auto { width: auto; padding: 0 13px; font-size: 12.5px; letter-spacing: 0.02em; }
 .chip-auto.selected {
-  background: linear-gradient(160deg, #5c9af0 0%, #3f7cd6 100%);
-  color: #fff;
+  background: linear-gradient(160deg, var(--accent-hi, #5c9af0) 0%, var(--accent-lo, #3f7cd6) 100%);
+  color: var(--text);
   border-color: rgba(255, 255, 255, 0.35);
   box-shadow: 0 0 0 2px rgba(79, 143, 232, 0.25), 0 2px 8px rgba(0, 0, 0, 0.35);
 }
@@ -727,8 +735,8 @@ main {
   transition: background 0.15s ease, color 0.15s ease;
 }
 .seg-btn.active {
-  background: linear-gradient(160deg, #5c9af0 0%, #3f7cd6 100%);
-  color: #fff;
+  background: linear-gradient(160deg, var(--accent-hi, #5c9af0) 0%, var(--accent-lo, #3f7cd6) 100%);
+  color: var(--text);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
@@ -844,3 +852,183 @@ body.loading .meter { visibility: hidden; }
   .ribbon::before { animation: none; }
   .tile, .icon-btn, .day-tab, .seg-btn, .chip, .btn, .nav-item, .meter i { transition: none; }
 }
+
+/* ---------- Header button cluster ---------- */
+.hdr-btns { display: flex; gap: 2px; }
+
+/* ---------- Data age ---------- */
+.timeline-head { justify-content: space-between; align-items: center; }
+.data-age { font-size: 10.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.data-age.stale { color: #d9a05e; font-weight: 600; }
+
+/* ---------- Tonight's sky ---------- */
+#tonight-panel { margin-top: 2px; }
+.tn-row {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  padding: 4px 0;
+  color: var(--text-dim);
+}
+.tn-row.tn-good { color: var(--text); }
+.tn-row.tn-warn { color: #d9a05e; }
+.tn-ic { flex: 0 0 18px; text-align: center; font-size: 12px; }
+
+/* ---------- Score breakdown ---------- */
+.bd-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 11.5px;
+}
+.bd-label { flex: 0 0 92px; color: var(--text-dim); }
+.bd-track {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.bd-fill { display: block; height: 100%; border-radius: 4px; }
+.bd-fill.band-good { background: var(--good); }
+.bd-fill.band-marginal { background: var(--marginal); }
+.bd-fill.band-bad { background: var(--bad); }
+.bd-val { margin-left: auto; color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: 10.5px; }
+.bd-note { font-size: 11px; margin-top: 8px; line-height: 1.4; }
+
+/* ---------- Saved locations ---------- */
+.loc-btns { display: flex; flex-direction: column; gap: 6px; }
+.saved-locs { margin-bottom: 10px; }
+.saved-locs:empty { display: none; }
+.saved-locs li { display: flex; align-items: baseline; gap: 8px; }
+.saved-locs li.current { color: var(--accent); }
+.saved-locs .sub { margin-left: auto; }
+.loc-del {
+  flex: 0 0 auto;
+  font-size: 16px;
+  color: var(--text-dim);
+  padding: 0 4px;
+  line-height: 1;
+}
+.loc-del:hover { color: var(--bad); }
+
+/* ---------- Appearance toggles ---------- */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+}
+.tg-label { font-size: 13.5px; font-weight: 600; }
+.tg-sub { font-size: 11px; margin-top: 1px; }
+.switch {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 26px;
+  border-radius: 13px;
+  background: #0b1530;
+  border: 1px solid #2a3a63;
+  position: relative;
+  transition: background 0.2s ease;
+}
+.switch i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+.switch.on { background: var(--accent); border-color: var(--accent); }
+.switch.on i { transform: translateX(18px); background: #fff; }
+
+/* ---------- Tablet ---------- */
+@media (min-width: 768px) {
+  main, header .bar, nav .bar { max-width: 640px; }
+  .grid { max-width: 470px; margin-left: auto; margin-right: auto; }
+}
+
+/* ---------- Color-blind palette (Okabe-Ito-ish: blue / amber / vermillion) ---------- */
+body.cb {
+  --good: #2e6cb5;
+  --good-strong: #28619f;
+  --marginal: #a1771f;
+  --bad: #b14a2e;
+  --bad-strong: #a2402a;
+  --grad-good: linear-gradient(160deg, #3579c4 0%, #255a95 100%);
+  --grad-marginal: linear-gradient(160deg, #b28425 0%, #7d5d18 100%);
+  --grad-bad: linear-gradient(160deg, #c05534 0%, #8d3a22 100%);
+  --grad-good-strong: linear-gradient(155deg, #2f6fb8 0%, #1f4d80 100%);
+  --grad-marginal-strong: linear-gradient(155deg, #a87c20 0%, #6f5315 100%);
+  --grad-bad-strong: linear-gradient(155deg, #b04a2c 0%, #7c331e 100%);
+}
+
+/* ---------- Red night mode ----------
+ * Every surface drops to deep red-on-near-black to protect dark adaptation.
+ * Condition bands are encoded by BRIGHTNESS (brighter red = better) since
+ * hue is unavailable; icons, charts, and the star field are pushed to red
+ * with a filter. Declared last so it also wins over the CB palette. */
+body.night {
+  --bg: #060101;
+  --header-bg: #170404;
+  --panel: #110303;
+  --text: #ff6157;
+  --text-dim: #a03e36;
+  --accent: #ff4b40;
+  --accent-hi: #c93a31;
+  --accent-lo: #8a251e;
+  --good: #8a2019;
+  --good-strong: #93231b;
+  --marginal: #541510;
+  --bad: #260906;
+  --bad-strong: #2d0b08;
+  --grad-panel: linear-gradient(160deg, #180505 0%, #0c0202 100%);
+  --grad-good: linear-gradient(160deg, #99251c 0%, #6d1913 100%);
+  --grad-marginal: linear-gradient(160deg, #5e1811 0%, #40100b 100%);
+  --grad-bad: linear-gradient(160deg, #2d0b08 0%, #1d0604 100%);
+  --grad-good-strong: linear-gradient(155deg, #a2271e 0%, #701a14 100%);
+  --grad-marginal-strong: linear-gradient(155deg, #63190f 0%, #45110a 100%);
+  --grad-bad-strong: linear-gradient(155deg, #330d09 0%, #200705 100%);
+  --line: rgba(255, 90, 80, 0.16);
+  --line-soft: rgba(255, 90, 80, 0.10);
+  --card-shadow: 0 10px 24px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 90, 80, 0.12);
+  background: #060101;
+}
+body.night header,
+body.night nav { background: rgba(23, 4, 4, 0.92); }
+body.night header { border-bottom-color: #000; box-shadow: 0 1px 0 rgba(255, 90, 80, 0.08) inset; }
+body.night nav { border-top-color: #000; }
+body.night :is(#stars, .t-icon, .moon-gfx, .logo, .error-emoji, .chart svg, .ch-tip i, .chart-legend i, .tn-ic) {
+  filter: sepia(1) saturate(5) hue-rotate(-38deg) brightness(0.6);
+}
+body.night .meter i,
+body.night .ribbon::before {
+  background: #ff5147;
+  box-shadow: 0 0 6px rgba(255, 70, 60, 0.7);
+}
+body.night .playhead { box-shadow: 0 0 7px rgba(255, 70, 60, 0.8); }
+body.night .playhead .grab { box-shadow: 0 0 7px rgba(255, 70, 60, 0.9), 0 1px 3px rgba(0, 0, 0, 0.6); }
+body.night .banner::before { background: radial-gradient(90% 55% at 50% -20%, rgba(255, 90, 80, 0.10), transparent 70%); }
+body.night .data-age.stale,
+body.night .tn-row.tn-warn { color: #ff8a5e; }
+body.night .switch.on i { background: #ffb0a8; }
+body.night .fc-hours td.fc-nowhdr { color: #1a0503; }
+body.night #city-search { background: #0d0202; border-color: #4a1712; }
+body.night .btn,
+body.night .chip { background: linear-gradient(160deg, #241010 0%, #170606 100%); border-color: #4a1712; }
+body.night .day-tab.active {
+  background: rgba(255, 75, 64, 0.13);
+  border-color: rgba(255, 75, 64, 0.35);
+}
+body.night .strip { background: #000; border-color: rgba(255, 90, 80, 0.12); }
+body.night .chip-auto.selected { box-shadow: 0 0 0 2px rgba(255, 75, 64, 0.25), 0 2px 8px rgba(0, 0, 0, 0.45); }
+body.night #city-search:focus { box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.4), 0 0 0 3px rgba(255, 75, 64, 0.22); }
+body.night .nav-item.active::before { box-shadow: 0 0 8px rgba(255, 75, 64, 0.6); }
+body.night .nav-item.active svg { filter: drop-shadow(0 0 6px rgba(255, 75, 64, 0.45)); }
+body.night .playhead, body.night .playhead .grab { background: #ff5147; }

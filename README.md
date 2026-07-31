@@ -33,7 +33,24 @@ timeline, day tabs for the full 14-day forecast, and 72-hour charts.
 - **Built for the field** — installable PWA (Add to Home Screen) with an
   offline service worker that serves your last forecast when there's no
   signal; "best window tonight" readout in the banner; per-night quality dots
-  on the day tabs; swipe the tile grid to change days.
+  on the day tabs; swipe the tile grid to change days; an "Updated h:mm"
+  staleness readout that flags offline/old data.
+- **Red night mode** — one tap in the header shifts the entire app to deep
+  red on black to preserve dark adaptation at the eyepiece (brightness
+  encodes condition quality while hue is unavailable).
+
+  ![Night mode](docs/screenshot-night.png)
+- **Tonight's Sky card** — moon phase with upcoming new/full moon dates,
+  Milky Way core peak altitude, active meteor showers (with moonlight
+  warnings), an aurora Kp outlook for relevant latitudes, and a
+  cross-model cloud-forecast confidence check (GFS vs ICON vs ECMWF).
+- **Explainable score** — tap the verdict banner for a metric-by-metric
+  breakdown showing each factor's weight, score, and any hard caps applied.
+- **Saved locations & shareable links** — keep up to 8 favorite spots and
+  share URLs that open your exact location (`?lat=…&lon=…&name=…`).
+- **Accessibility** — optional color-blind-safe palette (blue/amber/
+  vermillion), screen-reader announcements for the verdict, keyboard
+  scrubbing on the timeline.
 - **All astronomy computed client-side**: solar and lunar altitude, moon
   illumination and phase direction, and planet visibility from Keplerian orbital
   elements. No astronomy libraries, no API keys, no server.
@@ -48,6 +65,20 @@ timeline, day tabs for the full 14-day forecast, and 72-hour charts.
 - **[David Lorenz's Light Pollution Atlas 2024](https://djlorenz.github.io/astronomy/lp/)**
   — zenith sky brightness decoded client-side from his public binary tiles and
   converted to an approximate Bortle class.
+- **[Open-Meteo Air Quality](https://open-meteo.com/en/docs/air-quality-api)** —
+  aerosol optical depth (CAMS), used to sharpen the transparency estimate.
+- **[NOAA SWPC](https://www.swpc.noaa.gov/)** — planetary K-index forecast for
+  the aurora outlook.
+
+## Tests
+
+```bash
+npm test   # node --test — no dependencies to install
+```
+
+Pins the ephemeris math (solar altitude, lunation solver self-consistency,
+planet visibility), the full scoring table with its hard caps, the Bortle
+decode thresholds, and the Tonight's Sky helpers.
 
 All displayed times use the forecast location's timezone (as reported by
 Open-Meteo), never your browser's.

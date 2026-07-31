@@ -3,10 +3,15 @@
 import {
   fetchOpenMeteo, fetch7Timer, geocode, parseOpenMeteo,
   nearestAstro, heuristicSeeing, heuristicTransparency,
+  fetchAirQuality, fetchCloudModels,
 } from './weather.js';
-import { sunAltitude, moonAltitude, moonIllumination, visiblePlanets, altitudeCrossings } from './astro.js';
+import {
+  sunAltitude, moonAltitude, moonIllumination, visiblePlanets,
+  altitudeCrossings, nextLunations,
+} from './astro.js';
 import { overallScore } from './score.js';
 import { fetchLightPollution } from './lightpollution.js';
+import { fetchKpForecast } from './tonight.js';
 import * as UI from './ui.js';
 
 const PREFS_KEY = 'starcast:prefs';
@@ -14,7 +19,11 @@ const NYC = { lat: 40.7128, lon: -74.0060, name: 'New York City' };
 const REFRESH_MS = 30 * 60 * 1000;
 
 const state = {
-  prefs: { lat: null, lon: null, name: '', tz: 'America/New_York', bortle: 5, bortleAuto: true, units: 'imperial' },
+  prefs: {
+    lat: null, lon: null, name: '', tz: 'America/New_York',
+    bortle: 5, bortleAuto: true, units: 'imperial',
+    saved: [], night: false, cb: false,
+  },
   hours: [],
   days: [],
   daily: [],
@@ -23,11 +32,17 @@ const state = {
   currentHourIndex: 0,
   chartRange: 72, // hours shown on the Charts tab
   lightPollution: null, // { ratio, mpsas, bortle } from the atlas, if fetched
+  kp: null, // { maxKp, time } from NOAA SWPC, if fetched
+  lunations: [], // upcoming new/full moons
+  lastFetch: null, // epoch ms of the last non-cached Open-Meteo success
+  offlineData: false, // true when showing the SW's cached fallback
   status: 'loading', // loading | ready | error
 };
 
 let route = 'conditions';
 let astroSeries = null; // last successful 7Timer series (survives refetches)
+let aodMap = null; // epoch ms → aerosol optical depth
+let spreadMap = null; // epoch ms → cross-model cloud spread (%)
 
 /* ================= Prefs ================= */
 
@@ -43,13 +58,44 @@ function loadPrefs() {
   if (![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(state.prefs.bortle)) state.prefs.bortle = 5;
   if (typeof state.prefs.bortleAuto !== 'boolean') state.prefs.bortleAuto = true;
   if (!['imperial', 'metric'].includes(state.prefs.units)) state.prefs.units = 'imperial';
+  if (!Array.isArray(state.prefs.saved)) state.prefs.saved = [];
+  state.prefs.saved = state.prefs.saved
+    .filter((l) => l && Number.isFinite(l.lat) && Number.isFinite(l.lon) && typeof l.name === 'string')
+    .slice(0, 8);
+  if (typeof state.prefs.night !== 'boolean') state.prefs.night = false;
+  if (typeof state.prefs.cb !== 'boolean') state.prefs.cb = false;
+  try {
+    const t = Number(localStorage.getItem('starcast:lastFetch'));
+    if (Number.isFinite(t) && t > 0) state.lastFetch = t;
+  } catch (e) { /* ignore */ }
 }
 
 function savePrefs() {
   try {
-    const { lat, lon, name, tz, bortle, bortleAuto, units } = state.prefs;
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ lat, lon, name, tz, bortle, bortleAuto, units }));
+    const { lat, lon, name, tz, bortle, bortleAuto, units, saved, night, cb } = state.prefs;
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ lat, lon, name, tz, bortle, bortleAuto, units, saved, night, cb }));
   } catch (e) { /* private mode — prefs just won't persist */ }
+}
+
+/** Shared links: ?lat=..&lon=..&name=.. opens that location directly. */
+function parseShareParams() {
+  const p = new URLSearchParams(location.search);
+  const latStr = p.get('lat');
+  const lonStr = p.get('lon');
+  // Number(null) and Number('') are both 0 — require real values.
+  if (!latStr || !lonStr) {
+    if (location.search) history.replaceState(null, '', location.pathname + location.hash);
+    return;
+  }
+  const lat = Number(latStr);
+  const lon = Number(lonStr);
+  if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+    state.prefs.lat = lat;
+    state.prefs.lon = lon;
+    state.prefs.name = (p.get('name') || '').slice(0, 60) || `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+    savePrefs();
+  }
+  if (location.search) history.replaceState(null, '', location.pathname + location.hash);
 }
 
 /* ================= Light pollution (auto Bortle) ================= */
@@ -141,6 +187,27 @@ function applyAstroSeries() {
   }
 }
 
+/** Patch measured aerosol optical depth in; upgrade estimated transparency. */
+function applyAodMap() {
+  if (!aodMap) return;
+  for (const h of state.hours) {
+    const v = aodMap.get(h.time);
+    if (v != null) {
+      h.aod = v;
+      if (h.seeingIsEstimate) h.transparency = heuristicTransparency(h);
+    }
+  }
+}
+
+/** Patch cross-model cloud spread in (confidence signal, not scored). */
+function applySpreadMap() {
+  if (!spreadMap) return;
+  for (const h of state.hours) {
+    const v = spreadMap.get(h.time);
+    if (v != null) h.cloudSpread = v;
+  }
+}
+
 function buildDays() {
   const tz = state.prefs.tz;
   const byDate = new Map();
@@ -211,9 +278,12 @@ function buildData(omData) {
   }
 
   applyAstroSeries();
+  applyAodMap();
+  applySpreadMap();
   rescoreAll();
   updateCurrentHour();
   buildDays();
+  state.lunations = nextLunations(new Date(), 45);
 }
 
 /** Clamp (or, on first load, pick today + the current hour) the selection. */
@@ -239,11 +309,19 @@ function renderSelection() {
   UI.updatePlayhead(state);
 }
 
+function renderSelectionExtras() {
+  if (UI.isBreakdownOpen()) UI.renderBreakdown(state);
+}
+
 function renderData() {
   UI.renderDayTabs(state);
   UI.renderTimelineSegments(state);
   renderSelection();
+  renderSelectionExtras();
+  UI.renderTonight(state);
+  UI.renderDataAge(state);
   UI.renderSettings(state);
+  UI.renderSavedLocations(state);
   if (route === 'charts') UI.renderCharts(state);
   if (route === 'forecast') UI.renderForecast(state);
 }
@@ -260,13 +338,18 @@ async function refetchAll({ silent = false, first = false } = {}) {
     UI.showView(state, route);
   }
 
-  // Location-dependent, fire-and-forget: measured Bortle from the atlas.
-  if (first) refreshLightPollution();
+  if (first) {
+    // Location changed: stale side-channel data must not leak across places.
+    astroSeries = null;
+    aodMap = null;
+    spreadMap = null;
+    // Fire-and-forget: measured Bortle from the atlas.
+    refreshLightPollution();
+  }
 
   const omPromise = fetchOpenMeteo(state.prefs.lat, state.prefs.lon, state.prefs.units);
-  // 7Timer runs in parallel and NEVER blocks first paint: patch in whenever
-  // (and if ever) it lands. Its failure is silently absorbed — heuristics
-  // already cover seeing/transparency.
+  // Side-channel fetches run in parallel and NEVER block first paint: each
+  // patches in whenever (and if ever) it lands; failures are absorbed.
   fetch7Timer(state.prefs.lat, state.prefs.lon)
     .then((series) => {
       if (seq !== fetchSeq) return;
@@ -279,10 +362,50 @@ async function refetchAll({ silent = false, first = false } = {}) {
     })
     .catch(() => { /* keep heuristic estimates */ });
 
+  fetchAirQuality(state.prefs.lat, state.prefs.lon)
+    .then((map) => {
+      if (seq !== fetchSeq) return;
+      aodMap = map;
+      if (state.status === 'ready') {
+        applyAodMap();
+        rescoreAll();
+        renderData();
+      }
+    })
+    .catch(() => { /* humidity-based heuristic stands */ });
+
+  fetchCloudModels(state.prefs.lat, state.prefs.lon)
+    .then((map) => {
+      if (seq !== fetchSeq) return;
+      spreadMap = map;
+      if (state.status === 'ready') {
+        applySpreadMap();
+        UI.renderTonight(state);
+      }
+    })
+    .catch(() => { /* confidence line just won't show */ });
+
+  fetchKpForecast()
+    .then((kp) => {
+      state.kp = kp;
+      if (state.status === 'ready') UI.renderTonight(state);
+    })
+    .catch(() => { /* aurora line just won't show */ });
+
   const [om] = await Promise.allSettled([omPromise]);
   if (seq !== fetchSeq) return;
 
   if (om.status === 'fulfilled') {
+    // Staleness bookkeeping: a cache-fallback response (SW header) means
+    // we're offline showing saved data — say so instead of pretending.
+    if (om.value._fromCache) {
+      state.offlineData = true;
+      UI.showNotice('Offline — showing your last saved forecast.');
+    } else {
+      state.offlineData = false;
+      state.lastFetch = Date.now();
+      try { localStorage.setItem('starcast:lastFetch', String(state.lastFetch)); } catch (e) { /* ok */ }
+    }
     buildData(om.value);
     initSelection(first);
     state.status = 'ready';
@@ -319,6 +442,7 @@ function setHour(pos) {
   if (clamped === state.selectedHour) return;
   state.selectedHour = clamped;
   renderSelection();
+  renderSelectionExtras();
 }
 
 function setDay(i) {
@@ -329,6 +453,8 @@ function setDay(i) {
   UI.renderDayTabs(state);
   UI.renderTimelineSegments(state);
   renderSelection();
+  renderSelectionExtras();
+  UI.renderTonight(state);
 }
 
 function wireTimeline() {
@@ -397,10 +523,16 @@ function wireSwipe() {
 
 function wireShare() {
   document.getElementById('share-btn').addEventListener('click', async () => {
+    // Share links carry the location, so the recipient opens YOUR spot.
+    const { lat, lon, name } = state.prefs;
+    const base = location.origin + location.pathname;
+    const url = Number.isFinite(lat)
+      ? `${base}?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}&name=${encodeURIComponent(name || '')}`
+      : base;
     const payload = {
       title: 'Starcast',
-      text: 'Is it good to stargaze tonight?',
-      url: location.href.split('#')[0],
+      text: `Is it good to stargaze${name ? ` at ${name}` : ''} tonight?`,
+      url,
     };
     try {
       if (navigator.share) {
@@ -507,6 +639,70 @@ function wireSettings() {
   });
 }
 
+function wireBreakdown() {
+  const banner = document.getElementById('banner');
+  const toggle = () => {
+    if (state.status === 'ready') UI.toggleBreakdown(state);
+  };
+  banner.addEventListener('click', toggle);
+  banner.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+  });
+}
+
+function wireSavedLocations() {
+  document.getElementById('btn-save-loc').addEventListener('click', () => {
+    const { lat, lon, name } = state.prefs;
+    if (!Number.isFinite(lat)) return;
+    const dup = state.prefs.saved.some(
+      (l) => Math.abs(l.lat - lat) < 0.005 && Math.abs(l.lon - lon) < 0.005,
+    );
+    if (!dup) {
+      state.prefs.saved.unshift({ name: name || `${lat.toFixed(3)}, ${lon.toFixed(3)}`, lat, lon });
+      state.prefs.saved = state.prefs.saved.slice(0, 8);
+      savePrefs();
+    }
+    UI.renderSavedLocations(state);
+  });
+
+  document.getElementById('saved-locs').addEventListener('click', (e) => {
+    const del = e.target.closest('[data-del]');
+    if (del) {
+      state.prefs.saved.splice(Number(del.dataset.del), 1);
+      savePrefs();
+      UI.renderSavedLocations(state);
+      return;
+    }
+    const li = e.target.closest('li[data-idx]');
+    if (!li) return;
+    const loc = state.prefs.saved[Number(li.dataset.idx)];
+    if (!loc) return;
+    state.prefs.lat = loc.lat;
+    state.prefs.lon = loc.lon;
+    state.prefs.name = loc.name;
+    savePrefs();
+    UI.hideNotice();
+    UI.renderSettings(state);
+    UI.renderSavedLocations(state);
+    refetchAll({ first: true });
+  });
+}
+
+function wireAppearance() {
+  const setNight = (on) => {
+    state.prefs.night = on;
+    savePrefs();
+    UI.applyAppearance(state);
+  };
+  document.getElementById('night-btn').addEventListener('click', () => setNight(!state.prefs.night));
+  document.getElementById('toggle-night').addEventListener('click', () => setNight(!state.prefs.night));
+  document.getElementById('toggle-cb').addEventListener('click', () => {
+    state.prefs.cb = !state.prefs.cb;
+    savePrefs();
+    UI.applyAppearance(state);
+  });
+}
+
 function wireMisc() {
   // Charts range selector (24h / 3d / 7d)
   document.getElementById('chart-range').addEventListener('click', (e) => {
@@ -531,6 +727,11 @@ function wireMisc() {
       refetchAll({ silent: true });
     }
   }, REFRESH_MS);
+
+  // Keep the "Updated h:mm" age readout honest as time passes.
+  setInterval(() => {
+    if (state.status === 'ready') UI.renderDataAge(state);
+  }, 60000);
 }
 
 /* ================= Boot ================= */
@@ -551,6 +752,8 @@ async function boot() {
 
 function init() {
   loadPrefs();
+  parseShareParams(); // ?lat/lon/name links override the stored location
+  UI.applyAppearance(state); // night/CB classes before first paint
   UI.initStars();
   applyRoute(); // shell + skeleton render immediately, before any fetch
   wireTimeline();
@@ -558,6 +761,9 @@ function init() {
   wireSwipe();
   wireShare();
   wireSettings();
+  wireBreakdown();
+  wireSavedLocations();
+  wireAppearance();
   wireMisc();
   boot();
 

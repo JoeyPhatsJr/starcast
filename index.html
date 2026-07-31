@@ -23,9 +23,14 @@
       <div class="bar">
         <span class="logo" aria-hidden="true">🔭</span>
         <h1>Starcast<sup class="beta">beta</sup></h1>
+        <div class="hdr-btns">
+        <button id="night-btn" class="icon-btn" aria-label="Toggle red night mode" aria-pressed="false" title="Red night mode">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16" fill="currentColor" stroke="none"/></svg>
+        </button>
         <button id="share-btn" class="icon-btn" aria-label="Share Starcast" title="Share">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>
         </button>
+        </div>
       </div>
     </header>
 
@@ -37,17 +42,23 @@
           <button id="notice-close" aria-label="Dismiss notice">×</button>
         </div>
 
-        <div id="banner" class="banner">
+        <div id="banner" class="banner" role="button" tabindex="0" aria-label="Show score breakdown">
           <span id="live-ribbon" class="ribbon hidden">LIVE</span>
-          <div id="verdict" class="verdict-text">Loading forecast…</div>
+          <span class="info-hint" aria-hidden="true">ⓘ</span>
+          <div id="verdict" class="verdict-text" aria-live="polite">Loading forecast…</div>
           <div id="verdict-sub" class="verdict-sub">Checking the sky above you</div>
           <div class="meter" aria-hidden="true"><i id="verdict-meter-fill"></i></div>
           <div id="best-window" class="best-window hidden"></div>
         </div>
 
+        <div id="breakdown" class="panel hidden">
+          <h3>Why this score?</h3>
+          <div id="breakdown-body"></div>
+        </div>
+
         <!-- Scrubber directly under the verdict: thumb-reachable while the
              tiles below update in view. -->
-        <div class="timeline-head"><span id="timeline-label">▾ —</span></div>
+        <div class="timeline-head"><span id="data-age" class="data-age"></span><span id="timeline-label">▾ —</span></div>
         <div id="timeline-strip" class="strip" role="slider" aria-label="Hour of day" aria-valuemin="0" aria-valuemax="23" tabindex="0">
           <div id="playhead" class="playhead hidden"><div class="grab"></div></div>
         </div>
@@ -69,6 +80,11 @@
           <div class="tile" id="tile-moon"><div class="t-label">Moon</div><div class="t-value t-moon"><span class="moon-gfx"></span><span class="moon-pct">—</span></div><div class="t-sub"></div></div>
           <div class="tile" id="tile-planets"><div class="t-label">Planets</div><div class="t-value">—</div><div class="t-sub"></div></div>
           <div class="tile" id="tile-bortle"><span class="pencil" aria-hidden="true">✎</span><div class="t-label">Light Pollution</div><div class="t-value">—</div><div class="t-sub">Bortle</div></div>
+        </div>
+
+        <div class="panel" id="tonight-panel">
+          <h3 id="tonight-title">Tonight's sky</h3>
+          <div id="tonight-body"></div>
         </div>
       </section>
 
@@ -110,10 +126,26 @@
               <div id="loc-name">—</div>
               <div id="loc-coords" class="dim">—</div>
             </div>
-            <button id="btn-geoloc" class="btn">Use my location</button>
+            <div class="loc-btns">
+              <button id="btn-geoloc" class="btn">Use my location</button>
+              <button id="btn-save-loc" class="btn">☆ Save</button>
+            </div>
           </div>
+          <ul id="saved-locs" class="results saved-locs"></ul>
           <input id="city-search" type="search" placeholder="Search for a city…" autocomplete="off" spellcheck="false">
           <ul id="search-results" class="results"></ul>
+        </div>
+
+        <div class="panel" id="card-appearance">
+          <h3>Appearance</h3>
+          <div class="toggle-row">
+            <div><div class="tg-label">Red night mode</div><div class="dim tg-sub">Preserves your dark adaptation at the eyepiece</div></div>
+            <button id="toggle-night" class="switch" role="switch" aria-checked="false" aria-label="Red night mode"><i></i></button>
+          </div>
+          <div class="toggle-row">
+            <div><div class="tg-label">Color-blind palette</div><div class="dim tg-sub">Blue / amber / vermillion condition colors</div></div>
+            <button id="toggle-cb" class="switch" role="switch" aria-checked="false" aria-label="Color-blind palette"><i></i></button>
+          </div>
         </div>
 
         <div class="panel" id="card-bortle">
@@ -152,7 +184,9 @@
       <section id="view-help" class="view hidden">
         <div class="panel">
           <h3>How Starcast works</h3>
-          <p class="help-p">Starcast blends the hourly weather forecast, the sun and moon's computed positions, and your local light pollution into a single 0–1 stargazing score for every hour of the next two weeks. Pick a day, scrub to an hour, and every tile updates to that exact moment. Swipe left or right on the tile grid to change days; the dot under each day tab shows how good that night gets.</p>
+          <p class="help-p">Starcast blends the hourly weather forecast, the sun and moon's computed positions, and your local light pollution into a single 0–1 stargazing score for every hour of the next two weeks. Pick a day, scrub to an hour, and every tile updates to that exact moment. Swipe left or right on the tile grid to change days; the dot under each day tab shows how good that night gets. Tap the verdict banner to see exactly how the score was built, metric by metric.</p>
+          <p class="help-p">The Tonight's Sky card tracks the moon phase and upcoming new/full moons, the Milky Way core's peak altitude, active meteor showers (with a warning when moonlight will wash them out), the aurora outlook when it matters for your latitude, and whether the major weather models actually agree about tonight's clouds. Transparency estimates use measured aerosol optical depth when available.</p>
+          <p class="help-p">The eclipse button in the header switches to <strong>red night mode</strong> — the entire app drops to deep red on black to preserve your eyes' dark adaptation at the telescope (in red mode, brighter red = better conditions). A color-blind-friendly palette is available under Settings → Appearance, and Settings can save multiple locations for quick switching.</p>
           <p class="help-p">Tip: add Starcast to your home screen (Share → Add to Home Screen) for a full-screen app that opens instantly and keeps working offline with your last-fetched forecast — handy at dark-sky sites with no signal.</p>
         </div>
         <div class="panel">

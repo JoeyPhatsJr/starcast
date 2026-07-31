@@ -1,0 +1,9 @@
+{
+  "name": "starcast",
+  "private": true,
+  "type": "module",
+  "description": "Stargazing-conditions dashboard — pure static, no dependencies.",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  }
+}
