@@ -61,21 +61,38 @@ export function initStars() {
   const canvas = $('stars');
   const draw = () => {
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = window.innerWidth * dpr;
-    canvas.height = window.innerHeight * dpr;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
     const ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    ctx.clearRect(0, 0, w, h);
+    // Field of ~140 faint stars with a slight blue-white color variance…
     for (let i = 0; i < 140; i++) {
-      const x = Math.random() * window.innerWidth;
-      const y = Math.random() * window.innerHeight;
+      const x = Math.random() * w;
+      const y = Math.random() * h;
       const r = 0.4 + Math.random() * 0.7;
       ctx.globalAlpha = 0.2 + Math.random() * 0.6;
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = Math.random() < 0.3 ? '#cfdcf5' : '#ffffff';
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
     }
+    // …plus a dozen brighter ones with a soft glow (still a single static
+    // paint — no animation loop, no battery cost).
+    ctx.shadowColor = 'rgba(210, 225, 255, 0.9)';
+    for (let i = 0; i < 12; i++) {
+      const x = Math.random() * w;
+      const y = Math.random() * h;
+      ctx.globalAlpha = 0.55 + Math.random() * 0.35;
+      ctx.shadowBlur = 3 + Math.random() * 5;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(x, y, 0.8 + Math.random() * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
   };
   draw();
@@ -293,6 +310,7 @@ export function renderBanner(state) {
   $('verdict').textContent = verdict(h.score);
   $('verdict-sub').textContent =
     `${fmtWeekdayLong(h.time, tz)} • ${fmtISODate(h.time, tz)} • ${fmtTime(h.time, tz)}`;
+  $('verdict-meter-fill').style.width = `${Math.round(h.score * 100)}%`;
   const now = Date.now();
   const isLive = now >= h.time && now < h.time + 3600000;
   $('live-ribbon').classList.toggle('hidden', !isLive);
@@ -333,13 +351,19 @@ export function updatePlayhead(state) {
 
 export function renderDayTabs(state) {
   const wrap = $('day-tabs');
+  const tz = state.prefs.tz;
   wrap.textContent = '';
   state.days.forEach((day, i) => {
     const btn = document.createElement('button');
     btn.className = `day-tab${i === state.selectedDay ? ' active' : ''}`;
     btn.dataset.day = String(i);
     btn.setAttribute('role', 'tab');
-    btn.textContent = day.label;
+    const wd = document.createElement('span');
+    wd.textContent = day.label;
+    const num = document.createElement('span');
+    num.className = 'dt-num';
+    num.textContent = fmt(tz, { day: 'numeric' }).format(state.hours[day.hourIndices[0]].time);
+    btn.append(wd, num);
     wrap.appendChild(btn);
   });
 }
@@ -357,12 +381,23 @@ function buildChart(containerId, values, times, tz, opts) {
   const el = $(containerId);
   const n = values.length;
   if (n < 2) { el.textContent = ''; return; }
-  const { min, max, color, area } = opts;
+  // NOTE: colors must be concrete values (hex), not var(--x) — CSS custom
+  // properties don't resolve inside SVG *presentation attributes*, and we
+  // want gradient stops too.
+  const { min, max, color } = opts;
   const range = max - min || 1;
   const X = (i) => (i / (n - 1)) * CHART_W;
   const Y = (v) => CHART_H - ((v - min) / range) * CHART_H;
 
   const pts = values.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+
+  // Soft gradient wash under every series, fading to transparent.
+  const gid = `grad-${containerId}`;
+  const defs =
+    `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">` +
+    `<stop offset="0" stop-color="${color}" stop-opacity="0.32"/>` +
+    `<stop offset="1" stop-color="${color}" stop-opacity="0.02"/>` +
+    `</linearGradient></defs>`;
 
   // Vertical dashed lines + weekday labels at each local midnight
   let vlines = '';
@@ -370,7 +405,7 @@ function buildChart(containerId, values, times, tz, opts) {
   for (let i = 0; i < n; i++) {
     if (localHour(times[i], tz) === 0) {
       const x = X(i);
-      vlines += `<line x1="${x.toFixed(1)}" y1="0" x2="${x.toFixed(1)}" y2="${CHART_H}" stroke="#2a3a63" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/>`;
+      vlines += `<line x1="${x.toFixed(1)}" y1="0" x2="${x.toFixed(1)}" y2="${CHART_H}" stroke="#26365f" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/>`;
       xlabs += `<span class="xlab" style="left:${((x / CHART_W) * 100).toFixed(2)}%">${fmtWeekdayShort(times[i], tz)}</span>`;
     }
   }
@@ -381,23 +416,20 @@ function buildChart(containerId, values, times, tz, opts) {
   for (const f of [0.25, 0.5, 0.75]) {
     const y = CHART_H * (1 - f);
     const v = min + range * f;
-    hlines += `<line x1="0" y1="${y}" x2="${CHART_W}" y2="${y}" stroke="#2a3a63" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>`;
+    hlines += `<line x1="0" y1="${y}" x2="${CHART_W}" y2="${y}" stroke="#26365f" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>`;
     ylabs += `<span class="ylab" style="top:${y}px">${Math.round(v)}</span>`;
   }
 
-  let series;
-  if (area) {
-    const d = `M 0 ${CHART_H} L ${pts.split(' ').map((p) => p.replace(',', ' ')).join(' L ')} L ${CHART_W} ${CHART_H} Z`;
-    series =
-      `<path d="${d}" fill="${color}" fill-opacity="0.25" stroke="none"/>` +
-      `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
-  } else {
-    series = `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
-  }
+  const areaD = `M 0 ${CHART_H} L ${pts.split(' ').map((p) => p.replace(',', ' ')).join(' L ')} L ${CHART_W} ${CHART_H} Z`;
+  const series =
+    `<path d="${areaD}" fill="url(#${gid})" stroke="none"/>` +
+    // Wide translucent under-stroke gives the line a soft glow.
+    `<polyline points="${pts}" fill="none" stroke="${color}" stroke-opacity="0.22" stroke-width="6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>` +
+    `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.25" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
 
   el.innerHTML =
     `<svg viewBox="0 0 ${CHART_W} ${CHART_H}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">` +
-    hlines + vlines + series +
+    defs + hlines + vlines + series +
     `</svg>` + ylabs + xlabs;
 }
 
@@ -413,18 +445,20 @@ export function renderCharts(state) {
   $('chart-temp-title').textContent = `Temperature (°${metric ? 'C' : 'F'})`;
   $('chart-wind-title').textContent = `Wind (${metric ? 'km/h' : 'mph'})`;
 
+  // Brightened variants of the palette hues — the raw tile colors are tuned
+  // for large surfaces and read too muddy as 2px strokes on navy.
   buildChart('chart-cloud', slice.map((h) => h.cloud), times, tz, {
-    min: 0, max: 100, color: 'var(--bad)', area: true,
+    min: 0, max: 100, color: '#c76a6a',
   });
 
   const temps = slice.map((h) => h.temp);
   buildChart('chart-temp', temps, times, tz, {
-    min: Math.min(...temps) - 5, max: Math.max(...temps) + 5, color: 'var(--accent)',
+    min: Math.min(...temps) - 5, max: Math.max(...temps) + 5, color: '#5f9bef',
   });
 
   const winds = slice.map((h) => h.wind);
   buildChart('chart-wind', winds, times, tz, {
-    min: 0, max: Math.max(...winds) + 5, color: 'var(--good)',
+    min: 0, max: Math.max(...winds) + 5, color: '#5aa35c',
   });
 }
 
