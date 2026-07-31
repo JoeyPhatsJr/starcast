@@ -112,6 +112,34 @@ export function moonIllumination(date) {
   };
 }
 
+/**
+ * Find the times inside [startMs, endMs] where an altitude function crosses
+ * `threshold` degrees. Scans in `stepMinutes` strides, then bisects each
+ * bracket down to ~½-minute precision. Returns [{ time, rising }] in order.
+ * Used for moonrise/moonset (threshold 0) and astronomical-darkness bounds
+ * (sun crossing −18°).
+ */
+export function altitudeCrossings(altFn, startMs, endMs, threshold = 0, stepMinutes = 10) {
+  const out = [];
+  const step = stepMinutes * 60000;
+  let prevBelow = altFn(new Date(startMs)) < threshold;
+  for (let t = startMs + step; t <= endMs; t += step) {
+    const below = altFn(new Date(t)) < threshold;
+    if (below !== prevBelow) {
+      let lo = t - step;
+      let hi = t;
+      for (let i = 0; i < 5; i++) {
+        const mid = (lo + hi) / 2;
+        if ((altFn(new Date(mid)) < threshold) === prevBelow) lo = mid;
+        else hi = mid;
+      }
+      out.push({ time: (lo + hi) / 2, rising: prevBelow });
+    }
+    prevBelow = below;
+  }
+  return out;
+}
+
 /*
  * Planets — mean Keplerian elements at J2000 with linear rates per Julian
  * century (standard JPL "approximate positions" table). Element order:

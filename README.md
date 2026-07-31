@@ -20,7 +20,16 @@ timeline, day tabs for the full 14-day forecast, and 72-hour charts.
   and your Bortle light-pollution class.
 - **24-hour scrubbable timeline** colored hour-by-hour by overall score, with
   daylight hours dimmed, plus day tabs across the whole forecast range.
-- **Charts** — cloud cover, temperature, and wind for the next 72 hours.
+- **Forecast grid** — a Clear Outside-style hour-by-hour table for the next
+  7 days: cloud layers, precipitation, wind, temperature/dew point, humidity,
+  seeing, transparency, and moon-up per hour, every cell color-coded, with sun
+  and moon rise/set times and the astronomical-darkness window per day.
+- **Automatic light pollution** — your Bortle class is measured on the fly
+  from David Lorenz's World Atlas 2024 zenith-brightness tiles for your exact
+  coordinates (manual override always available).
+- **Interactive charts** — cloud (total + high), temperature + dew point,
+  wind, and seeing/transparency over 24 h / 3 d / 7 d, with touch/hover value
+  tooltips, daylight shading, and a "now" marker.
 - **All astronomy computed client-side**: solar and lunar altitude, moon
   illumination and phase direction, and planet visibility from Keplerian orbital
   elements. No astronomy libraries, no API keys, no server.
@@ -32,6 +41,9 @@ timeline, day tabs for the full 14-day forecast, and 72-hour charts.
 - **[7Timer!](https://www.7timer.info)** — astronomical seeing and transparency from
   the ASTRO product (~72 h coverage). When it's unreachable or out of range, Starcast
   falls back to a clearly-marked heuristic estimate.
+- **[David Lorenz's Light Pollution Atlas 2024](https://djlorenz.github.io/astronomy/lp/)**
+  — zenith sky brightness decoded client-side from his public binary tiles and
+  converted to an approximate Bortle class.
 
 All displayed times use the forecast location's timezone (as reported by
 Open-Meteo), never your browser's.
@@ -77,7 +89,8 @@ index.html       app shell + all four views
 css/style.css    the whole design system
 js/app.js        entry point: state, boot, routing, event wiring
 js/weather.js    Open-Meteo + 7Timer fetch/parse
-js/astro.js      sun / moon / planet ephemeris (Meeus-style, ±1°)
+js/lightpollution.js  Lorenz atlas tile decoding → Bortle estimate
+js/astro.js      sun / moon / planet ephemeris + rise/set solver (Meeus-style, ±1°)
 js/score.js      per-metric scoring + weighted overall verdict
 js/ui.js         all DOM rendering (tiles, timeline, charts, SVG icons)
 ```

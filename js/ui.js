@@ -296,6 +296,7 @@ export function renderTiles(state) {
     const root = $('tile-bortle');
     root.className = `tile band-${band(scoreMetric('lightPollution', state.prefs.bortle))}`;
     root.querySelector('.t-value').textContent = String(state.prefs.bortle);
+    root.querySelector('.t-sub').textContent = state.prefs.bortleAuto ? 'Bortle · auto' : 'Bortle · manual';
   }
 }
 
@@ -369,97 +370,341 @@ export function renderDayTabs(state) {
 }
 
 /* ================= Charts =================
- * Inline SVG line charts over the next 72 hours. The SVG stretches
+ * Interactive inline SVG line charts. The SVG stretches horizontally
  * (preserveAspectRatio="none") but strokes use vector-effect:
- * non-scaling-stroke, and text labels live in HTML overlays so nothing
- * distorts. Height is a fixed 120px so vertical positions map 1:1. */
+ * non-scaling-stroke, and all text lives in HTML overlays so nothing
+ * distorts. Height is a fixed 120px so vertical positions map 1:1.
+ *
+ * Features: multiple series per chart, daylight column shading, a "now"
+ * marker, adaptive x-ticks (6-hour for short ranges, midnights for long),
+ * and a touch/hover crosshair with a value tooltip. */
 
 const CHART_W = 720;
 const CHART_H = 120;
 
-function buildChart(containerId, values, times, tz, opts) {
+// Latest data per chart container, read by the shared pointer handler.
+const chartData = {};
+
+function buildChart(containerId, opts) {
   const el = $(containerId);
-  const n = values.length;
+  const { times, series, min, max, tz, yFmt, dayRuns, nowIdx, vFmt } = opts;
+  const n = times.length;
   if (n < 2) { el.textContent = ''; return; }
-  // NOTE: colors must be concrete values (hex), not var(--x) — CSS custom
-  // properties don't resolve inside SVG *presentation attributes*, and we
-  // want gradient stops too.
-  const { min, max, color } = opts;
+  // NOTE: colors must be concrete hex values, not var(--x) — CSS custom
+  // properties don't resolve inside SVG presentation attributes.
   const range = max - min || 1;
   const X = (i) => (i / (n - 1)) * CHART_W;
   const Y = (v) => CHART_H - ((v - min) / range) * CHART_H;
 
-  const pts = values.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  // Daylight column shading — a faint warm wash so night reads as the
+  // stargazing-relevant part of the chart.
+  let shading = '';
+  for (const [i0, i1] of dayRuns || []) {
+    const x0 = Math.max(0, X(i0) - CHART_W / (n - 1) / 2);
+    const x1 = Math.min(CHART_W, X(i1 - 1) + CHART_W / (n - 1) / 2);
+    shading += `<rect x="${x0.toFixed(1)}" y="0" width="${(x1 - x0).toFixed(1)}" height="${CHART_H}" fill="rgba(247,215,116,0.08)"/>`;
+  }
 
-  // Soft gradient wash under every series, fading to transparent.
-  const gid = `grad-${containerId}`;
-  const defs =
-    `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">` +
-    `<stop offset="0" stop-color="${color}" stop-opacity="0.32"/>` +
-    `<stop offset="1" stop-color="${color}" stop-opacity="0.02"/>` +
-    `</linearGradient></defs>`;
-
-  // Vertical dashed lines + weekday labels at each local midnight
+  // Adaptive x-axis: 6-hour ticks for short ranges, midnights for long.
+  const short = n <= 40;
   let vlines = '';
   let xlabs = '';
   for (let i = 0; i < n; i++) {
-    if (localHour(times[i], tz) === 0) {
-      const x = X(i);
-      vlines += `<line x1="${x.toFixed(1)}" y1="0" x2="${x.toFixed(1)}" y2="${CHART_H}" stroke="#26365f" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/>`;
-      xlabs += `<span class="xlab" style="left:${((x / CHART_W) * 100).toFixed(2)}%">${fmtWeekdayShort(times[i], tz)}</span>`;
-    }
+    const lh = localHour(times[i], tz);
+    const isTick = short ? lh % 6 === 0 : lh === 0;
+    if (!isTick) continue;
+    const x = X(i);
+    const major = lh === 0;
+    vlines += `<line x1="${x.toFixed(1)}" y1="0" x2="${x.toFixed(1)}" y2="${CHART_H}" stroke="#26365f" stroke-dasharray="${major ? '3 4' : '2 5'}" vector-effect="non-scaling-stroke"/>`;
+    const label = short
+      ? (major ? fmtWeekdayShort(times[i], tz) : fmt(tz, { hour: 'numeric' }).format(times[i]))
+      : fmtWeekdayShort(times[i], tz);
+    xlabs += `<span class="xlab" style="left:${((x / CHART_W) * 100).toFixed(2)}%">${label}</span>`;
   }
 
   // 3 horizontal dashed gridlines at 25/50/75% with value labels
+  const fmtY = yFmt || ((v) => String(Math.round(v)));
   let hlines = '';
   let ylabs = '';
   for (const f of [0.25, 0.5, 0.75]) {
     const y = CHART_H * (1 - f);
-    const v = min + range * f;
     hlines += `<line x1="0" y1="${y}" x2="${CHART_W}" y2="${y}" stroke="#26365f" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>`;
-    ylabs += `<span class="ylab" style="top:${y}px">${Math.round(v)}</span>`;
+    ylabs += `<span class="ylab" style="top:${y}px">${fmtY(min + range * f)}</span>`;
   }
 
-  const areaD = `M 0 ${CHART_H} L ${pts.split(' ').map((p) => p.replace(',', ' ')).join(' L ')} L ${CHART_W} ${CHART_H} Z`;
-  const series =
-    `<path d="${areaD}" fill="url(#${gid})" stroke="none"/>` +
-    // Wide translucent under-stroke gives the line a soft glow.
-    `<polyline points="${pts}" fill="none" stroke="${color}" stroke-opacity="0.22" stroke-width="6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>` +
-    `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.25" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+  // "Now" marker (dashed accent line)
+  let nowLine = '';
+  if (nowIdx != null && nowIdx >= 0 && nowIdx < n) {
+    const x = X(nowIdx);
+    nowLine = `<line x1="${x.toFixed(1)}" y1="0" x2="${x.toFixed(1)}" y2="${CHART_H}" stroke="#4f8fe8" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.9" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  // Series: optional gradient area fill on the flagged series, then a glow
+  // under-stroke and the main line for each.
+  let defs = '';
+  let body = '';
+  series.forEach((s, si) => {
+    const pts = s.values.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+    if (s.fill) {
+      const gid = `grad-${containerId}-${si}`;
+      defs +=
+        `<linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">` +
+        `<stop offset="0" stop-color="${s.color}" stop-opacity="0.30"/>` +
+        `<stop offset="1" stop-color="${s.color}" stop-opacity="0.02"/>` +
+        `</linearGradient>`;
+      const areaD = `M 0 ${CHART_H} L ${pts.split(' ').map((p) => p.replace(',', ' ')).join(' L ')} L ${CHART_W} ${CHART_H} Z`;
+      body += `<path d="${areaD}" fill="url(#${gid})" stroke="none"/>`;
+    }
+    const dash = s.dash ? ` stroke-dasharray="${s.dash}"` : '';
+    body +=
+      `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-opacity="0.20" stroke-width="6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>` +
+      `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2.25" stroke-linejoin="round"${dash} vector-effect="non-scaling-stroke"/>`;
+  });
 
   el.innerHTML =
     `<svg viewBox="0 0 ${CHART_W} ${CHART_H}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">` +
-    defs + hlines + vlines + series +
-    `</svg>` + ylabs + xlabs;
+    `<defs>${defs}</defs>` + shading + hlines + vlines + nowLine + body +
+    `</svg>` +
+    `<div class="ch-cursor"></div><div class="ch-tip"></div>` +
+    ylabs + xlabs;
+
+  chartData[containerId] = { times, series, tz, vFmt };
+  attachChartPointer(el);
+}
+
+function attachChartPointer(el) {
+  if (el.dataset.pointerWired) return;
+  el.dataset.pointerWired = '1';
+
+  const show = (e) => {
+    const st = chartData[el.id];
+    const svg = el.querySelector('svg');
+    if (!st || !svg) return;
+    const rect = svg.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const idx = Math.round(frac * (st.times.length - 1));
+    const xPct = (idx / (st.times.length - 1)) * 100;
+
+    const cursor = el.querySelector('.ch-cursor');
+    cursor.style.display = 'block';
+    cursor.style.left = `${xPct}%`;
+
+    const tip = el.querySelector('.ch-tip');
+    const when = `${fmtWeekdayShort(st.times[idx], st.tz)} ${fmtTime(st.times[idx], st.tz)}`;
+    tip.innerHTML =
+      `<div class="tt">${when}</div>` +
+      st.series.map((s) =>
+        `<div class="tv"><i style="background:${s.color}"></i>${s.label ? s.label + ' ' : ''}${st.vFmt(s.values[idx])}</div>`
+      ).join('');
+    tip.style.display = 'block';
+    // Flip the tooltip to the other side of the cursor near the edges.
+    if (xPct > 55) {
+      tip.style.left = 'auto';
+      tip.style.right = `${100 - xPct + 2}%`;
+    } else {
+      tip.style.right = 'auto';
+      tip.style.left = `${xPct + 2}%`;
+    }
+  };
+  const hide = () => {
+    const c = el.querySelector('.ch-cursor');
+    const t = el.querySelector('.ch-tip');
+    if (c) c.style.display = 'none';
+    if (t) t.style.display = 'none';
+  };
+
+  el.addEventListener('pointermove', show);
+  el.addEventListener('pointerdown', show);
+  el.addEventListener('pointerleave', hide);
+  el.addEventListener('pointercancel', hide);
+}
+
+/** Contiguous [start, end) index runs where pred(hour) holds. */
+function runsWhere(slice, pred) {
+  const out = [];
+  let start = -1;
+  slice.forEach((h, i) => {
+    if (pred(h)) {
+      if (start < 0) start = i;
+    } else if (start >= 0) {
+      out.push([start, i]);
+      start = -1;
+    }
+  });
+  if (start >= 0) out.push([start, slice.length]);
+  return out;
+}
+
+function setLegend(id, entries) {
+  $(id).innerHTML = entries
+    .map((e) => `<span><i style="background:${e.color}"></i>${e.label}</span>`)
+    .join('');
 }
 
 export function renderCharts(state) {
   if (!state.hours.length) return;
   const tz = state.prefs.tz;
   const metric = state.prefs.units === 'metric';
-  const start = Math.max(0, state.currentHourIndex);
-  const slice = state.hours.slice(start, start + 72);
+  const rangeH = state.chartRange || 72;
+  const lookback = 6; // a little past context so the "now" line has meaning
+  const start = Math.max(0, state.currentHourIndex - lookback);
+  const slice = state.hours.slice(start, start + rangeH + lookback);
   if (slice.length < 2) return;
   const times = slice.map((h) => h.time);
+  const dayRuns = runsWhere(slice, (h) => h.isDay === 1);
+  const nowIdx = state.currentHourIndex - start;
+  const deg = `°${metric ? 'C' : 'F'}`;
+  const windU = metric ? 'km/h' : 'mph';
 
-  $('chart-temp-title').textContent = `Temperature (°${metric ? 'C' : 'F'})`;
-  $('chart-wind-title').textContent = `Wind (${metric ? 'km/h' : 'mph'})`;
+  $('chart-temp-title').childNodes[0].textContent = `Temperature (${deg})`;
+  $('chart-wind-title').childNodes[0].textContent = `Wind (${windU})`;
 
   // Brightened variants of the palette hues — the raw tile colors are tuned
-  // for large surfaces and read too muddy as 2px strokes on navy.
-  buildChart('chart-cloud', slice.map((h) => h.cloud), times, tz, {
-    min: 0, max: 100, color: '#c76a6a',
+  // for large surfaces and read muddy as 2px strokes on navy.
+  buildChart('chart-cloud', {
+    times, tz, dayRuns, nowIdx, min: 0, max: 100,
+    series: [
+      { values: slice.map((h) => h.cloud), color: '#c76a6a', label: 'Total', fill: true },
+      { values: slice.map((h) => h.cloudHigh), color: '#d9a05e', label: 'High', dash: '4 4' },
+    ],
+    vFmt: (v) => `${Math.round(v)}%`,
   });
+  setLegend('chart-cloud-legend', [
+    { color: '#c76a6a', label: 'Total' }, { color: '#d9a05e', label: 'High' },
+  ]);
 
   const temps = slice.map((h) => h.temp);
-  buildChart('chart-temp', temps, times, tz, {
-    min: Math.min(...temps) - 5, max: Math.max(...temps) + 5, color: '#5f9bef',
+  const dews = slice.map((h) => h.dewPoint);
+  buildChart('chart-temp', {
+    times, tz, dayRuns, nowIdx,
+    min: Math.min(...temps, ...dews) - 4,
+    max: Math.max(...temps, ...dews) + 4,
+    series: [
+      { values: temps, color: '#5f9bef', label: 'Temp', fill: true },
+      { values: dews, color: '#8fa8d8', label: 'Dew', dash: '4 4' },
+    ],
+    vFmt: (v) => `${Math.round(v)}${deg}`,
   });
+  setLegend('chart-temp-legend', [
+    { color: '#5f9bef', label: 'Temp' }, { color: '#8fa8d8', label: 'Dew point' },
+  ]);
 
   const winds = slice.map((h) => h.wind);
-  buildChart('chart-wind', winds, times, tz, {
-    min: 0, max: Math.max(...winds) + 5, color: '#5aa35c',
+  buildChart('chart-wind', {
+    times, tz, dayRuns, nowIdx, min: 0, max: Math.max(...winds) + 5,
+    series: [{ values: winds, color: '#5aa35c', label: '', fill: true }],
+    vFmt: (v) => `${Math.round(v)} ${windU}`,
   });
+  setLegend('chart-wind-legend', []);
+
+  buildChart('chart-astro', {
+    times, tz, dayRuns, nowIdx, min: 0, max: 1,
+    yFmt: (v) => v.toFixed(1),
+    series: [
+      { values: slice.map((h) => h.seeing), color: '#d8b25a', label: 'Seeing' },
+      { values: slice.map((h) => h.transparency), color: '#6fc3c9', label: 'Transp', dash: '4 4' },
+    ],
+    vFmt: (v) => v.toFixed(1),
+  });
+  setLegend('chart-astro-legend', [
+    { color: '#d8b25a', label: 'Seeing' }, { color: '#6fc3c9', label: 'Transparency' },
+  ]);
+}
+
+/* ================= Forecast grid (Clear Outside-style) =================
+ * One block per day: rows are metrics, columns are hours, every cell
+ * colored by the same scoring bands as the tiles. Built as an HTML string
+ * per day (thousands of cells — string assembly is much faster than DOM
+ * calls, and every value is internally generated). */
+
+export function renderForecast(state) {
+  const wrap = $('forecast-days');
+  if (!state.days.length) { wrap.textContent = ''; return; }
+  const tz = state.prefs.tz;
+  const metric = state.prefs.units === 'metric';
+  const spreadToF = metric ? 1.8 : 1; // dew-spread thresholds are in °F
+
+  const bandOf = (score) => `band-${band(score)}`;
+  const humBand = (rh) => (rh <= 70 ? 'band-good' : rh <= 85 ? 'band-marginal' : 'band-bad');
+  const dewBand = (h) => {
+    const spreadF = (h.temp - h.dewPoint) * spreadToF; // small spread → fog risk
+    return spreadF >= 5 ? 'band-good' : spreadF >= 2.5 ? 'band-marginal' : 'band-bad';
+  };
+
+  const rows = [
+    { label: 'Sky', cell: (h) => [bandOf(h.score), ''] },
+    { label: 'Cloud %', cell: (h) => [bandOf(scoreMetric('cloud', h.cloud)), Math.round(h.cloud)] },
+    { label: 'Low %', cell: (h) => [bandOf(scoreMetric('cloud', h.cloudLow)), Math.round(h.cloudLow)] },
+    { label: 'Mid %', cell: (h) => [bandOf(scoreMetric('cloud', h.cloudMid)), Math.round(h.cloudMid)] },
+    { label: 'High %', cell: (h) => [bandOf(scoreMetric('cloud', h.cloudHigh)), Math.round(h.cloudHigh)] },
+    { label: 'Precip %', cell: (h) => [bandOf(scoreMetric('precip', h.precipProb)), Math.round(h.precipProb)] },
+    { label: metric ? 'Wind km/h' : 'Wind mph', cell: (h) => [bandOf(scoreMetric('wind', h.windMph)), Math.round(h.wind)] },
+    { label: 'Temp °', cell: (h) => [bandOf(scoreMetric('windChill', h.apparentF)), Math.round(h.temp)] },
+    { label: 'Dew °', cell: (h) => [dewBand(h), Math.round(h.dewPoint)] },
+    { label: 'Humidity %', cell: (h) => [humBand(h.humidity), Math.round(h.humidity)] },
+    { label: 'Seeing', cell: (h) => [bandOf(scoreMetric('seeing', h.seeing)), h.seeing.toFixed(1)] },
+    { label: 'Transp.', cell: (h) => [bandOf(scoreMetric('transparency', h.transparency)), h.transparency.toFixed(1)] },
+    {
+      label: 'Moon',
+      cell: (h) => [
+        bandOf(scoreMetric('moon', null, { moonAltitude: h.moonAlt, moonIllum: h.moonIllum })),
+        h.moonAlt >= 0 ? '●' : '',
+      ],
+    },
+  ];
+
+  let html = '';
+  for (const day of state.days.slice(0, 7)) {
+    const hours = day.hourIndices.map((i) => state.hours[i]);
+    const first = hours[0];
+
+    const sunPart = `☀ ↑${day.sunrise != null ? fmtTime(day.sunrise, tz) : '—'} ↓${day.sunset != null ? fmtTime(day.sunset, tz) : '—'}`;
+    const moonPart = `🌙 ↑${day.moonRise != null ? fmtTime(day.moonRise, tz) : '—'} ↓${day.moonSet != null ? fmtTime(day.moonSet, tz) : '—'} · ${Math.round(first.moonIllum * 100)}%`;
+    let darkPart;
+    if (day.neverDark) {
+      darkPart = 'No astro darkness';
+    } else {
+      const bits = [];
+      if (day.darkEnd != null) bits.push(`until ${fmtTime(day.darkEnd, tz)}`);
+      if (day.darkStart != null) bits.push(`from ${fmtTime(day.darkStart, tz)}`);
+      darkPart = bits.length ? `✦ Dark ${bits.join(' · ')}` : '✦ Dark all day';
+    }
+
+    let head = `<tr class="fc-hours"><th></th>`;
+    hours.forEach((h, i) => {
+      const now = day.hourIndices[i] === state.currentHourIndex;
+      head += `<td${now ? ' class="fc-nowhdr"' : ''}>${localHour(h.time, tz)}</td>`;
+    });
+    head += '</tr>';
+
+    let bodyRows = '';
+    for (const row of rows) {
+      bodyRows += `<tr><th>${row.label}</th>`;
+      hours.forEach((h, i) => {
+        const [cls, txt] = row.cell(h);
+        const now = day.hourIndices[i] === state.currentHourIndex ? ' fc-now' : '';
+        bodyRows += `<td class="${cls}${now}">${txt}</td>`;
+      });
+      bodyRows += '</tr>';
+    }
+
+    html +=
+      `<div class="panel fc-day">` +
+      `<div class="fc-head">` +
+      `<div class="fc-title">${day.label === 'Today' ? 'Today' : fmtWeekdayLong(first.time, tz)} · ${fmtISODate(first.time, tz)}</div>` +
+      `<div class="fc-meta"><span>${sunPart}</span><span>${moonPart}</span><span>${darkPart}</span></div>` +
+      `</div>` +
+      `<div class="fc-scroll"><table class="fc-grid">${head}${bodyRows}</table></div>` +
+      `</div>`;
+  }
+  wrap.innerHTML = html;
+
+  // Scroll today's grid so the current-hour column is in view.
+  const nowHdr = wrap.querySelector('.fc-nowhdr');
+  if (nowHdr) {
+    const scroller = nowHdr.closest('.fc-scroll');
+    scroller.scrollLeft = Math.max(0, nowHdr.offsetLeft - scroller.clientWidth / 2);
+  }
 }
 
 /* ================= Settings ================= */
@@ -472,12 +717,26 @@ export function renderSettings(state) {
       : '—';
 
   document.querySelectorAll('#bortle-chips .chip').forEach((chip) => {
+    if (chip.dataset.bortle === 'auto') {
+      chip.className = 'chip chip-auto' + (state.prefs.bortleAuto ? ' selected' : '');
+      return;
+    }
     const b = Number(chip.dataset.bortle);
     const selected = b === state.prefs.bortle;
     chip.className = 'chip' + (selected ? ` selected band-${band(scoreMetric('lightPollution', b))}` : '');
   });
 
-  document.querySelectorAll('.seg-btn').forEach((btn) => {
+  const cap = $('bortle-caption');
+  const lp = state.lightPollution;
+  if (state.prefs.bortleAuto) {
+    cap.textContent = lp
+      ? `Auto — measured Bortle ${lp.bortle} · ${lp.mpsas.toFixed(2)} mag/arcsec² (World Atlas 2024)`
+      : 'Auto — measuring from the light pollution atlas…';
+  } else {
+    cap.textContent = '1 = pristine dark sky · 9 = inner city — or tap Auto to measure';
+  }
+
+  document.querySelectorAll('#card-units .seg-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.units === state.prefs.units);
   });
 }
