@@ -948,10 +948,55 @@ body.loading .meter { visibility: hidden; }
 .switch.on { background: var(--accent); border-color: var(--accent); }
 .switch.on i { transform: translateX(18px); background: #fff; }
 
-/* ---------- Tablet ---------- */
+/* ---------- Tablet (two-pane Conditions) ---------- */
 @media (min-width: 768px) {
-  main, header .bar, nav .bar { max-width: 640px; }
-  .grid { max-width: 470px; margin-left: auto; margin-right: auto; }
+  main, header .bar, nav .bar { max-width: 740px; }
+  #view-conditions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    /* Leftover height (the tiles column is tall) lands in the final row,
+       not stretched across the scrubber/tabs rows. */
+    grid-template-rows: auto auto auto auto auto auto 1fr;
+    column-gap: 20px;
+    align-content: start;
+    grid-template-areas:
+      "notice notice"
+      "banner banner"
+      "breakdown breakdown"
+      "thead tiles"
+      "strip tiles"
+      "tabs tiles"
+      "tonight tiles";
+  }
+  #view-conditions > .timeline-head,
+  #view-conditions > #timeline-strip,
+  #view-conditions > #day-tabs { align-self: start; }
+  #view-conditions > #notice { grid-area: notice; }
+  #view-conditions > #banner { grid-area: banner; }
+  #view-conditions > #breakdown { grid-area: breakdown; }
+  #view-conditions > .timeline-head { grid-area: thead; }
+  #view-conditions > #timeline-strip { grid-area: strip; }
+  #view-conditions > #day-tabs { grid-area: tabs; }
+  #view-conditions > #tile-grid { grid-area: tiles; margin-bottom: 0; align-content: start; }
+  #view-conditions > #tonight-panel { grid-area: tonight; align-self: start; margin-top: 0; }
+  .fc-scroll { overflow-x: visible; } /* 24 columns fit without scrolling */
+}
+
+/* ---------- Desktop ---------- */
+@media (min-width: 1080px) {
+  main, header .bar, nav .bar { max-width: 1024px; }
+  #view-conditions { grid-template-columns: 5fr 6fr; column-gap: 28px; }
+  #view-charts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 14px;
+    align-content: start;
+  }
+  #view-charts > .chart-range,
+  #view-charts > .chart-hint { grid-column: 1 / -1; }
+  #view-settings { columns: 2; column-gap: 14px; }
+  #view-settings .panel { break-inside: avoid; }
+  #view-help { max-width: 760px; margin: 0 auto; }
 }
 
 /* ---------- Color-blind palette (Okabe-Ito-ish: blue / amber / vermillion) ---------- */
@@ -1032,3 +1077,33 @@ body.night #city-search:focus { box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.4), 
 body.night .nav-item.active::before { box-shadow: 0 0 8px rgba(255, 75, 64, 0.6); }
 body.night .nav-item.active svg { filter: drop-shadow(0 0 6px rgba(255, 75, 64, 0.45)); }
 body.night .playhead, body.night .playhead .grab { background: #ff5147; }
+
+/* ---------- Update toast & calendar button ---------- */
+.update-toast {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--accent);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.update-toast button {
+  font-weight: 800;
+  text-decoration: underline;
+  color: inherit;
+}
+body.night .update-toast { background: #8a2019; color: var(--text); }
+
+.best-window { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.cal-btn { font-size: 13px; line-height: 1; padding: 1px 2px; border-radius: 5px; }
+.cal-btn:hover { background: rgba(255, 255, 255, 0.15); }
+body.night .cal-btn { filter: sepia(1) saturate(5) hue-rotate(-38deg) brightness(0.7); }

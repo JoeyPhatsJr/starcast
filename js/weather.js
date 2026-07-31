@@ -157,8 +157,18 @@ export function nearestAstro(series, epochMs, maxGapMs = 2 * 3600000) {
   return bestGap <= maxGapMs ? bestPoint : null;
 }
 
-/** Heuristic seeing when 7Timer is unavailable or out of range. */
+/**
+ * Heuristic seeing when 7Timer is unavailable or out of range.
+ * With measured upper-air winds (hour.w250 / hour.w500, km/h) the estimate
+ * reflects the real driver of astronomical seeing: wind shear aloft. A jet
+ * stream overhead (250 hPa ≳ 180 km/h) wrecks seeing no matter how calm the
+ * surface is; a slack jet (≲ 60 km/h) over calm ground is superb.
+ */
 export function heuristicSeeing(hour) {
+  if (hour.w250 != null) {
+    return Math.max(0, Math.min(1,
+      1.05 - hour.w250 / 260 - (hour.w500 ?? 0) / 400 - hour.windMph / 80));
+  }
   return Math.max(0, Math.min(1, 1 - hour.cloud / 100 - hour.windMph / 60));
 }
 
@@ -226,6 +236,54 @@ export async function fetchCloudModels(lat, lon) {
     if (vals.length >= 2) map.set(t * 1000, Math.max(...vals) - Math.min(...vals));
   });
   return map;
+}
+
+/**
+ * Upper-air winds at the 250 and 500 hPa levels (always km/h regardless of
+ * the display unit, so the seeing heuristic is unit-stable). Returns a Map
+ * of epoch-ms → { w250, w500 }.
+ */
+export async function fetchPressureWinds(lat, lon) {
+  const params = new URLSearchParams({
+    latitude: lat,
+    longitude: lon,
+    hourly: 'wind_speed_250hPa,wind_speed_500hPa',
+    wind_speed_unit: 'kmh',
+    forecast_days: '14',
+    timeformat: 'unixtime',
+    timezone: 'auto',
+  });
+  const res = await fetch(`${OM_FORECAST}?${params}`);
+  if (!res.ok) throw new Error(`Pressure winds HTTP ${res.status}`);
+  const data = await res.json();
+  const h = data.hourly || {};
+  const map = new Map();
+  (h.time || []).forEach((t, i) => {
+    const w250 = h.wind_speed_250hPa?.[i];
+    if (w250 != null) map.set(t * 1000, { w250, w500: h.wind_speed_500hPa?.[i] ?? null });
+  });
+  return map;
+}
+
+/**
+ * Reverse geocode for naming the user's GPS position (BigDataCloud's free
+ * client endpoint — keyless, CORS-open). 4-second timeout; callers fall
+ * back to a generic label on any failure.
+ */
+export async function reverseGeocode(lat, lon) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 4000);
+  try {
+    const url = `https://api-bdc.io/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`Reverse geocode HTTP ${res.status}`);
+    const d = await res.json();
+    const name = d.city || d.locality || d.principalSubdivision;
+    if (!name) throw new Error('No name in response');
+    return String(name).slice(0, 40);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** City search via Open-Meteo's geocoder. Returns up to 5 candidates. */

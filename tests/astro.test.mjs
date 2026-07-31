@@ -5,8 +5,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   julianDate, sunAltitude, moonAltitude, moonIllumination,
-  visiblePlanets, nextLunations, altitudeCrossings,
+  visiblePlanets, nextLunations, altitudeCrossings, planetNightEvents,
 } from '../js/astro.js';
+import { heuristicSeeing } from '../js/weather.js';
 import { scoreMetric, overallScore, verdict, band, WEIGHTS } from '../js/score.js';
 import { bortleFromMpsas } from '../js/lightpollution.js';
 import { activeShowers, phaseName, kpNeeded, milkyWayPeak } from '../js/tonight.js';
@@ -128,6 +129,35 @@ test('kp thresholds fall with latitude', () => {
   assert.ok(kpNeeded(68) < kpNeeded(58));
   assert.ok(kpNeeded(58) < kpNeeded(46));
   assert.equal(kpNeeded(30), 9);
+});
+
+test('planet night events: sane fields, sorted best-first, consistent with visiblePlanets', () => {
+  // The night of 2026-07-31 in NYC, ~9 PM EDT to 5 AM EDT.
+  const start = Date.parse('2026-08-01T01:00:00Z');
+  const end = Date.parse('2026-08-01T09:00:00Z');
+  const events = planetNightEvents(start, end, NYC.lat, NYC.lon);
+  assert.ok(events.length >= 1, 'at least one planet clears 5° during the night');
+  for (const e of events) {
+    assert.ok(e.peakAlt > 5 && e.peakAlt <= 90, `${e.name} peakAlt ${e.peakAlt}`);
+    assert.ok(e.peakTime >= start && e.peakTime <= end);
+    if (e.rise != null) assert.ok(e.rise >= start && e.rise <= end);
+  }
+  const alts = events.map((e) => e.peakAlt);
+  assert.deepEqual(alts, [...alts].sort((a, b) => b - a), 'sorted best first');
+  // Cross-check: each event planet is "visible" at its own peak time.
+  for (const e of events) {
+    assert.ok(visiblePlanets(new Date(e.peakTime), NYC.lat, NYC.lon).includes(e.abbr), e.name);
+  }
+});
+
+test('shear-based seeing: jet stream wrecks it, slack jet is fine', () => {
+  const calm = { cloud: 0, windMph: 3, w250: 50, w500: 25 };
+  const jet = { cloud: 0, windMph: 3, w250: 220, w500: 120 };
+  assert.ok(heuristicSeeing(calm) > 0.55, `calm ${heuristicSeeing(calm)}`);
+  assert.ok(heuristicSeeing(jet) < 0.2, `jet ${heuristicSeeing(jet)}`);
+  // Without upper-air data it falls back to the cloud+wind heuristic
+  const legacy = { cloud: 20, windMph: 6 };
+  assert.ok(Math.abs(heuristicSeeing(legacy) - (1 - 0.2 - 0.1)) < 1e-9);
 });
 
 test('milky way core: transits ~south and higher from lower latitudes', () => {

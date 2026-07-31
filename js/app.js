@@ -3,7 +3,7 @@
 import {
   fetchOpenMeteo, fetch7Timer, geocode, parseOpenMeteo,
   nearestAstro, heuristicSeeing, heuristicTransparency,
-  fetchAirQuality, fetchCloudModels,
+  fetchAirQuality, fetchCloudModels, fetchPressureWinds, reverseGeocode,
 } from './weather.js';
 import {
   sunAltitude, moonAltitude, moonIllumination, visiblePlanets,
@@ -43,6 +43,7 @@ let route = 'conditions';
 let astroSeries = null; // last successful 7Timer series (survives refetches)
 let aodMap = null; // epoch ms → aerosol optical depth
 let spreadMap = null; // epoch ms → cross-model cloud spread (%)
+let shearMap = null; // epoch ms → { w250, w500 } upper-air winds (km/h)
 
 /* ================= Prefs ================= */
 
@@ -147,10 +148,27 @@ function geolocate() {
   });
 }
 
+/** Replace the generic "My Location" label with a real place name. */
+function labelCurrentLocation() {
+  const { lat, lon } = state.prefs;
+  reverseGeocode(lat, lon)
+    .then((name) => {
+      // Only apply if the user hasn't since moved somewhere else.
+      if (state.prefs.lat === lat && state.prefs.lon === lon && state.prefs.name === 'My Location') {
+        state.prefs.name = name;
+        savePrefs();
+        UI.renderSettings(state);
+        UI.renderSavedLocations(state);
+      }
+    })
+    .catch(() => { /* "My Location" is a fine fallback */ });
+}
+
 async function resolveLocation() {
   if (Number.isFinite(state.prefs.lat) && Number.isFinite(state.prefs.lon)) return;
   try {
     Object.assign(state.prefs, await geolocate());
+    labelCurrentLocation();
   } catch (e) {
     // Denied, timed out, or insecure context → NYC default + dismissible notice.
     Object.assign(state.prefs, NYC);
@@ -205,6 +223,19 @@ function applySpreadMap() {
   for (const h of state.hours) {
     const v = spreadMap.get(h.time);
     if (v != null) h.cloudSpread = v;
+  }
+}
+
+/** Patch upper-air winds in; upgrade estimated seeing to shear-based. */
+function applyShearMap() {
+  if (!shearMap) return;
+  for (const h of state.hours) {
+    const v = shearMap.get(h.time);
+    if (v) {
+      h.w250 = v.w250;
+      h.w500 = v.w500;
+      if (h.seeingIsEstimate) h.seeing = heuristicSeeing(h);
+    }
   }
 }
 
@@ -280,6 +311,7 @@ function buildData(omData) {
   applyAstroSeries();
   applyAodMap();
   applySpreadMap();
+  applyShearMap();
   rescoreAll();
   updateCurrentHour();
   buildDays();
@@ -343,6 +375,7 @@ async function refetchAll({ silent = false, first = false } = {}) {
     astroSeries = null;
     aodMap = null;
     spreadMap = null;
+    shearMap = null;
     // Fire-and-forget: measured Bortle from the atlas.
     refreshLightPollution();
   }
@@ -384,6 +417,18 @@ async function refetchAll({ silent = false, first = false } = {}) {
       }
     })
     .catch(() => { /* confidence line just won't show */ });
+
+  fetchPressureWinds(state.prefs.lat, state.prefs.lon)
+    .then((map) => {
+      if (seq !== fetchSeq) return;
+      shearMap = map;
+      if (state.status === 'ready') {
+        applyShearMap();
+        rescoreAll();
+        renderData();
+      }
+    })
+    .catch(() => { /* cloud+wind seeing heuristic stands */ });
 
   fetchKpForecast()
     .then((kp) => {
@@ -592,9 +637,9 @@ function wireSettings() {
     try {
       Object.assign(state.prefs, await geolocate());
       savePrefs();
+      labelCurrentLocation();
       UI.hideNotice();
       UI.renderSettings(state);
-      astroSeries = null;
       refetchAll({ first: true });
     } catch (e) {
       UI.showNotice("Couldn't get your location — check browser permissions.");
@@ -646,7 +691,44 @@ function wireBreakdown() {
   };
   banner.addEventListener('click', toggle);
   banner.addEventListener('keydown', (e) => {
+    if (e.target !== banner) return; // don't hijack the calendar button
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+  });
+}
+
+// "Add to calendar": download an .ics for the night's best window — the
+// closest thing to notifications a static site can offer.
+function wireCalendarExport() {
+  document.getElementById('cal-btn').addEventListener('click', (e) => {
+    e.stopPropagation(); // the banner click would open the breakdown
+    const win = UI.bestWindowFor(state);
+    if (!win) return;
+    const startMs = win.hours[0].time;
+    const endMs = win.hours[win.hours.length - 1].time + 3600000;
+    const toICS = (ms) => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const esc = (s) => String(s).replace(/([,;\\])/g, '\\$1');
+    const name = state.prefs.name || 'your location';
+    const ics = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Starcast//EN',
+      'BEGIN:VEVENT',
+      `UID:starcast-${startMs}@starcast`,
+      `DTSTAMP:${toICS(Date.now())}`,
+      `DTSTART:${toICS(startMs)}`,
+      `DTEND:${toICS(endMs)}`,
+      `SUMMARY:${esc(`Stargazing — ${win.level} window (Starcast)`)}`,
+      `DESCRIPTION:${esc(`Forecast ${win.level} stargazing window at ${name}. ${location.origin}${location.pathname}`)}`,
+      `LOCATION:${esc(name)}`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+    const blob = new Blob([ics], { type: 'text/calendar' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'starcast-window.ics';
+    a.click();
+    URL.revokeObjectURL(a.href);
   });
 }
 
@@ -762,14 +844,22 @@ function init() {
   wireShare();
   wireSettings();
   wireBreakdown();
+  wireCalendarExport();
   wireSavedLocations();
   wireAppearance();
   wireMisc();
   boot();
 
   // PWA: offline shell + last-forecast caching. Registration is best-effort
-  // (requires https or localhost; fails silently elsewhere).
+  // (requires https or localhost; fails silently elsewhere). When a NEW
+  // service worker takes control of an already-controlled page, a deploy
+  // just landed — offer a one-tap reload instead of updating silently.
   if ('serviceWorker' in navigator) {
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController) UI.showUpdateToast();
+    });
+    document.getElementById('update-reload').addEventListener('click', () => location.reload());
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js').catch(() => {});
     });

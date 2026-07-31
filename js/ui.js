@@ -7,6 +7,7 @@
 
 import { scoreMetric, verdict, band, WEIGHTS } from './score.js';
 import { activeShowers, milkyWayPeak, phaseName, kpNeeded } from './tonight.js';
+import { planetNightEvents } from './astro.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -356,20 +357,36 @@ export function renderBanner(state) {
   // Best stargazing window for the selected day's night — the single most
   // useful line for a glance on the way out the door.
   const bw = $('best-window');
+  const bwText = $('best-window-text');
+  const calBtn = $('cal-btn');
   const night = nightHours(state, state.selectedDay);
-  const good = bestNightWindow(night, 0.66);
-  const okay = good || bestNightWindow(night, 0.33);
+  const win = bestWindowFor(state);
   const label = state.days[state.selectedDay]?.isToday ? 'tonight' : 'that night';
   if (!night.length) {
-    bw.textContent = '✦ No dark hours';
-  } else if (okay) {
-    const from = fmtTime(okay[0].time, tz);
-    const to = fmtTime(okay[okay.length - 1].time + 3600000, tz);
-    bw.textContent = `✦ ${good ? 'Best window' : 'Marginal window'} ${label}: ${from} – ${to}`;
+    bwText.textContent = '✦ No dark hours';
+  } else if (win) {
+    const from = fmtTime(win.hours[0].time, tz);
+    const to = fmtTime(win.hours[win.hours.length - 1].time + 3600000, tz);
+    bwText.textContent = `✦ ${win.level === 'good' ? 'Best window' : 'Marginal window'} ${label}: ${from} – ${to}`;
   } else {
-    bw.textContent = `✦ No usable window ${label}`;
+    bwText.textContent = `✦ No usable window ${label}`;
   }
+  calBtn.classList.toggle('hidden', !win);
   bw.classList.remove('hidden');
+}
+
+/** The night's best contiguous window, for the banner pill + calendar export. */
+export function bestWindowFor(state) {
+  const night = nightHours(state, state.selectedDay);
+  const good = bestNightWindow(night, 0.66);
+  const win = good || bestNightWindow(night, 0.33);
+  return win ? { hours: win, level: good ? 'good' : 'marginal' } : null;
+}
+
+/* ================= Update toast ================= */
+
+export function showUpdateToast() {
+  $('update-toast').classList.remove('hidden');
 }
 
 /* ================= Timeline ================= */
@@ -884,6 +901,21 @@ export function renderTonight(state) {
       rows.push({ ic: '✨', text: `Milky Way core stays low (${Math.round(mw.alt)}° around ${fmtTime(mw.time, tz)})` });
     } else {
       rows.push({ ic: '✨', text: 'Milky Way core not visible this night' });
+    }
+  }
+
+  // Planets: rise time + peak altitude across the night, best three
+  if (night.length) {
+    const startMs = night[0].time;
+    const endMs = night[night.length - 1].time + 3600000;
+    const planets = planetNightEvents(startMs, endMs, lat, state.prefs.lon).slice(0, 3);
+    for (const p of planets) {
+      const risePart = p.rise ? `↑ ${fmtTime(p.rise, tz)}` : 'up at dusk';
+      rows.push({
+        ic: '🪐',
+        text: `${p.name} ${risePart} · peaks ${Math.round(p.peakAlt)}° at ${fmtTime(p.peakTime, tz)}`,
+        cls: p.peakAlt >= 30 ? 'tn-good' : '',
+      });
     }
   }
 

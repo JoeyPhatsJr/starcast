@@ -48,7 +48,7 @@
           <div id="verdict" class="verdict-text" aria-live="polite">Loading forecast…</div>
           <div id="verdict-sub" class="verdict-sub">Checking the sky above you</div>
           <div class="meter" aria-hidden="true"><i id="verdict-meter-fill"></i></div>
-          <div id="best-window" class="best-window hidden"></div>
+          <div id="best-window" class="best-window hidden"><span id="best-window-text"></span><button id="cal-btn" class="cal-btn hidden" aria-label="Add this window to your calendar" title="Add to calendar">📅</button></div>
         </div>
 
         <div id="breakdown" class="panel hidden">
@@ -185,7 +185,7 @@
         <div class="panel">
           <h3>How Starcast works</h3>
           <p class="help-p">Starcast blends the hourly weather forecast, the sun and moon's computed positions, and your local light pollution into a single 0–1 stargazing score for every hour of the next two weeks. Pick a day, scrub to an hour, and every tile updates to that exact moment. Swipe left or right on the tile grid to change days; the dot under each day tab shows how good that night gets. Tap the verdict banner to see exactly how the score was built, metric by metric.</p>
-          <p class="help-p">The Tonight's Sky card tracks the moon phase and upcoming new/full moons, the Milky Way core's peak altitude, active meteor showers (with a warning when moonlight will wash them out), the aurora outlook when it matters for your latitude, and whether the major weather models actually agree about tonight's clouds. Transparency estimates use measured aerosol optical depth when available.</p>
+          <p class="help-p">The Tonight's Sky card tracks the moon phase and upcoming new/full moons, the Milky Way core's peak altitude, when each visible planet rises and peaks, active meteor showers (with a warning when moonlight will wash them out), the aurora outlook when it matters for your latitude, and whether the major weather models actually agree about tonight's clouds. Transparency estimates use measured aerosol optical depth, and seeing estimates use measured jet-stream winds, whenever those are available. The 📅 button on the best-window pill saves that window to your calendar.</p>
           <p class="help-p">The eclipse button in the header switches to <strong>red night mode</strong> — the entire app drops to deep red on black to preserve your eyes' dark adaptation at the telescope (in red mode, brighter red = better conditions). A color-blind-friendly palette is available under Settings → Appearance, and Settings can save multiple locations for quick switching.</p>
           <p class="help-p">Tip: add Starcast to your home screen (Share → Add to Home Screen) for a full-screen app that opens instantly and keeps working offline with your last-fetched forecast — handy at dark-sky sites with no signal.</p>
         </div>
@@ -259,6 +259,11 @@
         </a>
       </div>
     </nav>
+  </div>
+
+  <div id="update-toast" class="update-toast hidden" role="status">
+    <span>Starcast was updated</span>
+    <button id="update-reload">Reload</button>
   </div>
 
   <noscript>

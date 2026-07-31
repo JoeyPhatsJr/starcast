@@ -41,9 +41,18 @@ timeline, day tabs for the full 14-day forecast, and 72-hour charts.
 
   ![Night mode](docs/screenshot-night.png)
 - **Tonight's Sky card** — moon phase with upcoming new/full moon dates,
-  Milky Way core peak altitude, active meteor showers (with moonlight
-  warnings), an aurora Kp outlook for relevant latitudes, and a
-  cross-model cloud-forecast confidence check (GFS vs ICON vs ECMWF).
+  Milky Way core peak altitude, per-planet rise times and peak altitudes for
+  the night, active meteor showers (with moonlight warnings), an aurora Kp
+  outlook for relevant latitudes, and a cross-model cloud-forecast confidence
+  check (GFS vs ICON vs ECMWF).
+- **Physics-based seeing** — when 7Timer is unreachable, the seeing estimate
+  is driven by measured 250/500 hPa upper-air winds (jet-stream shear, the
+  real driver of astronomical seeing) rather than surface conditions alone.
+- **Calendar export** — the 📅 button on the best-window pill downloads an
+  `.ics` event for that night's window.
+- **Responsive layouts** — phone-first, a two-pane layout on tablets
+  (scrubber + Tonight's Sky beside the tile grid), and a desktop layout with
+  a 2×2 chart dashboard and two-column settings.
 - **Explainable score** — tap the verdict banner for a metric-by-metric
   breakdown showing each factor's weight, score, and any hard caps applied.
 - **Saved locations & shareable links** — keep up to 8 favorite spots and
@@ -69,6 +78,8 @@ timeline, day tabs for the full 14-day forecast, and 72-hour charts.
   aerosol optical depth (CAMS), used to sharpen the transparency estimate.
 - **[NOAA SWPC](https://www.swpc.noaa.gov/)** — planetary K-index forecast for
   the aurora outlook.
+- **[BigDataCloud](https://www.bigdatacloud.com/)** — free reverse geocoding,
+  used only to put a real place name on your GPS position.
 
 ## Tests
 
