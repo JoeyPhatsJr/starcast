@@ -300,6 +300,42 @@ export function renderTiles(state) {
   }
 }
 
+/* ================= Night analysis =================
+ * "The night of day D" = hours with the sun below the horizon between D's
+ * noon and D+1's noon, so an evening window that crosses midnight reads as
+ * one night instead of being chopped at 12:00 AM. */
+
+export function nightHours(state, dayIdx) {
+  const day = state.days[dayIdx];
+  if (!day) return [];
+  const next = state.days[dayIdx + 1];
+  const noonMs = state.hours[day.hourIndices[0]].time + 12 * 3600000;
+  const idxs = day.hourIndices.concat(next ? next.hourIndices : []);
+  return idxs
+    .map((i) => state.hours[i])
+    .filter((h) => h.time >= noonMs && h.time < noonMs + 24 * 3600000 && h.sunAlt < 0);
+}
+
+/** Longest contiguous run of night hours at/above `minScore`. */
+function bestNightWindow(hours, minScore) {
+  let best = null;
+  let run = [];
+  const flush = () => {
+    if (run.length && (!best || run.length > best.length)) best = run;
+    run = [];
+  };
+  for (const h of hours) {
+    if (h.score >= minScore && (run.length === 0 || h.time - run[run.length - 1].time === 3600000)) {
+      run.push(h);
+    } else {
+      flush();
+      if (h.score >= minScore) run = [h];
+    }
+  }
+  flush();
+  return best;
+}
+
 /* ================= Banner ================= */
 
 export function renderBanner(state) {
@@ -315,6 +351,24 @@ export function renderBanner(state) {
   const now = Date.now();
   const isLive = now >= h.time && now < h.time + 3600000;
   $('live-ribbon').classList.toggle('hidden', !isLive);
+
+  // Best stargazing window for the selected day's night — the single most
+  // useful line for a glance on the way out the door.
+  const bw = $('best-window');
+  const night = nightHours(state, state.selectedDay);
+  const good = bestNightWindow(night, 0.66);
+  const okay = good || bestNightWindow(night, 0.33);
+  const label = state.days[state.selectedDay]?.isToday ? 'tonight' : 'that night';
+  if (!night.length) {
+    bw.textContent = '✦ No dark hours';
+  } else if (okay) {
+    const from = fmtTime(okay[0].time, tz);
+    const to = fmtTime(okay[okay.length - 1].time + 3600000, tz);
+    bw.textContent = `✦ ${good ? 'Best window' : 'Marginal window'} ${label}: ${from} – ${to}`;
+  } else {
+    bw.textContent = `✦ No usable window ${label}`;
+  }
+  bw.classList.remove('hidden');
 }
 
 /* ================= Timeline ================= */
@@ -364,9 +418,18 @@ export function renderDayTabs(state) {
     const num = document.createElement('span');
     num.className = 'dt-num';
     num.textContent = fmt(tz, { day: 'numeric' }).format(state.hours[day.hourIndices[0]].time);
-    btn.append(wd, num);
+    // Night-quality dot: the best hourly score of that day's night, so you
+    // can pick the good night of the week at a glance.
+    const night = nightHours(state, i);
+    const bestScore = night.length ? Math.max(...night.map((h) => h.score)) : 0;
+    const dot = document.createElement('i');
+    dot.className = `dt-dot band-${band(bestScore)}`;
+    btn.append(wd, num, dot);
     wrap.appendChild(btn);
   });
+  // Keep the active tab in view (matters once you're days deep via swiping).
+  const act = wrap.querySelector('.day-tab.active');
+  if (act) wrap.scrollLeft = Math.max(0, act.offsetLeft - wrap.clientWidth / 2 + act.clientWidth / 2);
 }
 
 /* ================= Charts =================

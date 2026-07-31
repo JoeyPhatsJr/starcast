@@ -369,6 +369,32 @@ function wireDayTabs() {
   });
 }
 
+// Swipe left/right anywhere on the tile grid to change day — the natural
+// mobile gesture. Horizontal-dominant swipes only, so vertical scrolling
+// is never hijacked.
+function wireSwipe() {
+  const zone = document.getElementById('tile-grid');
+  let sx = 0;
+  let sy = 0;
+  let tracking = false;
+  zone.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    sx = t.clientX;
+    sy = t.clientY;
+    tracking = true;
+  }, { passive: true });
+  zone.addEventListener('touchend', (e) => {
+    if (!tracking || state.status !== 'ready') return;
+    tracking = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - sx;
+    const dy = t.clientY - sy;
+    if (Math.abs(dx) > 55 && Math.abs(dx) > 2 * Math.abs(dy)) {
+      setDay(state.selectedDay + (dx < 0 ? 1 : -1));
+    }
+  }, { passive: true });
+}
+
 function wireShare() {
   document.getElementById('share-btn').addEventListener('click', async () => {
     const payload = {
@@ -529,10 +555,19 @@ function init() {
   applyRoute(); // shell + skeleton render immediately, before any fetch
   wireTimeline();
   wireDayTabs();
+  wireSwipe();
   wireShare();
   wireSettings();
   wireMisc();
   boot();
+
+  // PWA: offline shell + last-forecast caching. Registration is best-effort
+  // (requires https or localhost; fails silently elsewhere).
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    });
+  }
 }
 
 init();

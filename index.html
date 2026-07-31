@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17264d">
   <meta name="description" content="Starcast — a stargazing-conditions dashboard. Is it good to stargaze at your location tonight?">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Starcast">
   <title>Starcast — Is it good to stargaze tonight?</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='12'%20fill='%230c1428'/%3E%3Cpath%20d='M32%2010l5.5%2013.5L52%2025l-11%209.5L44.5%2049%2032%2041l-12.5%208L23%2034.5%2012%2025l14.5-1.5z'%20fill='%23f2f5fa'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="./css/style.css">
@@ -36,7 +42,16 @@
           <div id="verdict" class="verdict-text">Loading forecast…</div>
           <div id="verdict-sub" class="verdict-sub">Checking the sky above you</div>
           <div class="meter" aria-hidden="true"><i id="verdict-meter-fill"></i></div>
+          <div id="best-window" class="best-window hidden"></div>
         </div>
+
+        <!-- Scrubber directly under the verdict: thumb-reachable while the
+             tiles below update in view. -->
+        <div class="timeline-head"><span id="timeline-label">▾ —</span></div>
+        <div id="timeline-strip" class="strip" role="slider" aria-label="Hour of day" aria-valuemin="0" aria-valuemax="23" tabindex="0">
+          <div id="playhead" class="playhead hidden"><div class="grab"></div></div>
+        </div>
+        <div id="day-tabs" class="day-tabs" role="tablist"></div>
 
         <div id="tile-grid" class="grid">
           <div class="tile" id="tile-weather"><div class="t-label">Weather</div><div class="t-value t-icon"></div><div class="t-sub"></div></div>
@@ -55,12 +70,6 @@
           <div class="tile" id="tile-planets"><div class="t-label">Planets</div><div class="t-value">—</div><div class="t-sub"></div></div>
           <div class="tile" id="tile-bortle"><span class="pencil" aria-hidden="true">✎</span><div class="t-label">Light Pollution</div><div class="t-value">—</div><div class="t-sub">Bortle</div></div>
         </div>
-
-        <div class="timeline-head"><span id="timeline-label">▾ —</span></div>
-        <div id="timeline-strip" class="strip" role="slider" aria-label="Hour of day" aria-valuemin="0" aria-valuemax="23" tabindex="0">
-          <div id="playhead" class="playhead hidden"><div class="grab"></div></div>
-        </div>
-        <div id="day-tabs" class="day-tabs" role="tablist"></div>
       </section>
 
       <!-- ============ ERROR ============ -->
@@ -143,7 +152,8 @@
       <section id="view-help" class="view hidden">
         <div class="panel">
           <h3>How Starcast works</h3>
-          <p class="help-p">Starcast blends the hourly weather forecast, the sun and moon's computed positions, and your local light pollution into a single 0–1 stargazing score for every hour of the next two weeks. Pick a day, scrub to an hour, and every tile updates to that exact moment.</p>
+          <p class="help-p">Starcast blends the hourly weather forecast, the sun and moon's computed positions, and your local light pollution into a single 0–1 stargazing score for every hour of the next two weeks. Pick a day, scrub to an hour, and every tile updates to that exact moment. Swipe left or right on the tile grid to change days; the dot under each day tab shows how good that night gets.</p>
+          <p class="help-p">Tip: add Starcast to your home screen (Share → Add to Home Screen) for a full-screen app that opens instantly and keeps working offline with your last-fetched forecast — handy at dark-sky sites with no signal.</p>
         </div>
         <div class="panel">
           <h3>The verdict &amp; tiles</h3>

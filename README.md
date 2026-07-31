@@ -30,6 +30,10 @@ timeline, day tabs for the full 14-day forecast, and 72-hour charts.
 - **Interactive charts** — cloud (total + high), temperature + dew point,
   wind, and seeing/transparency over 24 h / 3 d / 7 d, with touch/hover value
   tooltips, daylight shading, and a "now" marker.
+- **Built for the field** — installable PWA (Add to Home Screen) with an
+  offline service worker that serves your last forecast when there's no
+  signal; "best window tonight" readout in the banner; per-night quality dots
+  on the day tabs; swipe the tile grid to change days.
 - **All astronomy computed client-side**: solar and lunar altitude, moon
   illumination and phase direction, and planet visibility from Keplerian orbital
   elements. No astronomy libraries, no API keys, no server.
@@ -83,9 +87,13 @@ all asset paths are relative, so the app works from a project subpath out of the
 
 ## Project structure
 
+> Contributor note: `sw.js` precaches the app shell — bump its `VERSION`
+> constant whenever you change app files so clients pick up the new deploy.
+
 ```
-index.html       app shell + all four views
+index.html       app shell + all five views
 .nojekyll        tells GitHub Pages to skip Jekyll processing
+manifest.webmanifest + sw.js + icon-*.png   PWA install & offline support
 css/style.css    the whole design system
 js/app.js        entry point: state, boot, routing, event wiring
 js/weather.js    Open-Meteo + 7Timer fetch/parse
