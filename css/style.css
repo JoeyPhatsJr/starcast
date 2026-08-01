@@ -76,6 +76,14 @@ button {
   -webkit-touch-callout: none;
 }
 
+/* Kill double-tap-to-zoom (and its 300ms tap delay) on everything
+ * interactive — rapid taps on day tabs/tiles/chips must never zoom the
+ * page. Scrolling and (where allowed) panning still work. The strip keeps
+ * its stricter touch-action: none, charts their pan-y. */
+a, button, input, .tile, .banner, .day-tabs, .fc-scroll, .grid, .switch {
+  touch-action: manipulation;
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -658,7 +666,7 @@ main {
   border-radius: 9px;
   padding: 10px 12px;
   font: inherit;
-  font-size: 14px;
+  font-size: 16px; /* <16px makes iOS Safari zoom the page on focus */
   color: var(--text);
   outline: none;
   box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.3);
@@ -1143,3 +1151,4 @@ body.night .cal-btn { filter: sepia(1) saturate(5) hue-rotate(-38deg) brightness
 }
 .timeline-head { min-height: 20px; }
 #tonight-body { min-height: 150px; } /* reserve space before async rows land */
+
