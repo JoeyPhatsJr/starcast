@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {
   julianDate, sunAltitude, moonAltitude, moonIllumination,
   visiblePlanets, nextLunations, altitudeCrossings, planetNightEvents,
+  altitudeOf, horizontalOf,
 } from '../js/astro.js';
 import { heuristicSeeing } from '../js/weather.js';
 import { scoreMetric, overallScore, verdict, band, WEIGHTS } from '../js/score.js';
@@ -168,4 +169,19 @@ test('milky way core: transits ~south and higher from lower latitudes', () => {
   const keyWest = milkyWayPeak(times, 24.55, -81.8);
   assert.ok(keyWest.alt > nyc.alt, `${keyWest.alt} > ${nyc.alt}`);
   assert.ok(nyc.alt > 10 && nyc.alt < 30, `NYC July core peak ≈ 20°, got ${nyc.alt}`);
+});
+
+/* ================= horizontalOf (alt/az) ================= */
+
+test('Polaris sits at az≈0, alt≈latitude', () => {
+  const jd = julianDate(new Date('2026-08-01T04:00:00Z'));
+  const { alt, az } = horizontalOf(37.95, 89.26, jd, NYC.lat, NYC.lon); // Polaris J2000
+  assert.ok(Math.abs(alt - NYC.lat) < 1.5, `alt ${alt}`);
+  assert.ok(az < 2.5 || az > 357.5, `az ${az}`);
+});
+
+test('altitudeOf still matches horizontalOf.alt exactly', () => {
+  const jd = julianDate(new Date('2026-03-15T02:00:00Z'));
+  const alt = altitudeOf(101.29, -16.72, jd, NYC.lat, NYC.lon); // Sirius
+  assert.equal(alt, horizontalOf(101.29, -16.72, jd, NYC.lat, NYC.lon).alt);
 });

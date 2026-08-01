@@ -49,10 +49,22 @@ function eclToEq(lam, bet, jd) {
 
 /** Altitude (degrees) of a body at (ra, dec) for an observer at lat/lon. */
 export function altitudeOf(ra, dec, jd, lat, lon) {
+  return horizontalOf(ra, dec, jd, lat, lon).alt;
+}
+
+/**
+ * Horizontal coordinates of a body at (ra, dec): altitude plus compass
+ * azimuth (0 = north, 90 = east). Azimuth comes from the standard
+ * meridian-relative form, then is rotated 180° to compass convention.
+ */
+export function horizontalOf(ra, dec, jd, lat, lon) {
   const lst = gmst(jd) + lon; // local sidereal time, east longitude positive
   const ha = norm360(lst - ra); // hour angle
   const alt = Math.asin(sin(lat) * sin(dec) + cos(lat) * cos(dec) * cos(ha)) * RAD;
-  return alt;
+  const az = norm360(
+    Math.atan2(sin(ha), cos(ha) * sin(lat) - Math.tan(dec * DEG) * cos(lat)) * RAD + 180
+  );
+  return { alt, az };
 }
 
 /** Apparent ecliptic longitude of the Sun, degrees (Meeus ch. 25, truncated). */
