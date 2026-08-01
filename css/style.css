@@ -1152,3 +1152,187 @@ body.night .cal-btn { filter: sepia(1) saturate(5) hue-rotate(-38deg) brightness
 .timeline-head { min-height: 20px; }
 #tonight-body { min-height: 150px; } /* reserve space before async rows land */
 
+/* ============================================================
+   APPLE WEATHER THEME — uncommitted experiment.
+   Frosted-glass materials, airy typography, atmospheric gradient.
+   Compare: live site = previous look, localhost = this look.
+   Revert with `git restore css/style.css`; keep by committing.
+   ============================================================ */
+
+:root {
+  --radius: 16px;
+  --line: rgba(255, 255, 255, 0.16);
+  --line-soft: rgba(255, 255, 255, 0.10);
+  --text-dim: rgba(233, 239, 250, 0.62);
+  --card-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+  /* Frosted materials: translucent tints that blur what's behind them */
+  --grad-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.05));
+}
+
+/* Atmospheric sky gradient, light at the horizon-top fading to deep night */
+body {
+  background: linear-gradient(180deg, #34456e 0%, #22304f 30%, #101b36 65%, #080e1e 100%);
+}
+
+/* Frosted materials */
+.panel, .notice, .error-box, .segmented, #city-search,
+.btn, .chip, #timeline-label, .update-toast, .day-tab.active, .ch-tip {
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(150%);
+}
+.panel {
+  background: var(--grad-panel);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  box-shadow: var(--card-shadow);
+}
+.panel h2 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-dim);
+}
+.panel h2::before { display: none; }
+
+/* ---- Hero banner: transparent, big airy type, band-colored glow ---- */
+.banner,
+.banner.band-good, .banner.band-marginal, .banner.band-bad {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding-top: 22px;
+}
+.banner::before {
+  background: radial-gradient(65% 90% at 50% 12%, var(--good), transparent 72%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.banner.band-good::before { background: radial-gradient(65% 90% at 50% 12%, var(--good), transparent 72%); opacity: 0.38; }
+.banner.band-marginal::before { background: radial-gradient(65% 90% at 50% 12%, var(--marginal), transparent 72%); opacity: 0.38; }
+.banner.band-bad::before { background: radial-gradient(65% 90% at 50% 12%, var(--bad), transparent 72%); opacity: 0.38; }
+.verdict-text {
+  font-size: 33px;
+  font-weight: 600;
+  letter-spacing: -0.6px;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.4);
+}
+.verdict-sub { font-size: 13px; opacity: 0.72; margin-top: 6px; }
+.meter { background: rgba(255, 255, 255, 0.18); }
+.best-window {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(150%);
+}
+.ribbon {
+  transform: none;
+  top: 2px;
+  left: 8px;
+  border-radius: 999px;
+  background: rgba(79, 143, 232, 0.85);
+  box-shadow: none;
+}
+.info-hint { opacity: 0.4; }
+
+/* ---- Tiles: color-tinted frosted glass, Apple-style small-caps labels ---- */
+.tile {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+}
+.t-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+/* ---- Timeline & day tabs ---- */
+#timeline-label {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.strip {
+  background: rgba(0, 0, 0, 0.28);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.seg { opacity: 0.95; }
+.day-tab { border-radius: 999px; padding: 7px 13px 6px; }
+.day-tab.active {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.26);
+  box-shadow: none;
+}
+.day-tab.active .dt-num { color: var(--text); }
+
+/* ---- Chrome: frosted header & nav ---- */
+header {
+  background: rgba(16, 25, 48, 0.55);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+nav {
+  background: rgba(12, 19, 38, 0.55);
+  border-top-color: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+header h1 { font-weight: 600; }
+header .logo { filter: none; }
+
+/* ---- Controls ---- */
+.btn {
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: none;
+}
+.btn-accent { background: rgba(79, 143, 232, 0.75); border-color: rgba(255, 255, 255, 0.25); }
+#city-search {
+  background: rgba(0, 0, 0, 0.22);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: none;
+}
+.chip {
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.chip-auto.selected {
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: none;
+}
+.segmented { background: rgba(0, 0, 0, 0.22); border-color: rgba(255, 255, 255, 0.14); }
+.seg-btn.active {
+  background: rgba(255, 255, 255, 0.24);
+  box-shadow: none;
+}
+.switch { background: rgba(0, 0, 0, 0.3); border-color: rgba(255, 255, 255, 0.18); }
+.switch.on { background: rgba(79, 143, 232, 0.85); border-color: transparent; }
+.results li { border-bottom-color: rgba(255, 255, 255, 0.08); }
+.results li:hover, .results li:active { background: rgba(255, 255, 255, 0.08); }
+
+/* ---- Forecast grid: sticky labels over frosted panels ---- */
+.fc-grid th { background: rgba(18, 27, 50, 0.92); }
+
+/* ---- Charts ---- */
+.chart .ylab { background: rgba(10, 16, 32, 0.7); }
+.ch-tip { background: rgba(15, 22, 42, 0.75); border-color: rgba(255, 255, 255, 0.16); }
+
+/* ---- Loading skeleton on frosted surfaces ---- */
+body.loading .tile,
+body.loading .banner,
+body.loading .strip { background: rgba(255, 255, 255, 0.08); }
+
+/* Night mode: its opaque red palette overrides the vars above (body.night
+   is closer than :root), and frosted borders inherit the red --line. */
+body.night { background: #060101; }
+body.night .banner.band-good::before,
+body.night .banner.band-marginal::before,
+body.night .banner.band-bad::before { opacity: 0.3; }
+body.night header, body.night nav { background: rgba(20, 4, 4, 0.6); }
+body.night .fc-grid th { background: rgba(18, 4, 3, 0.92); }
+/* Night-mode fixes for the frosted theme's hardcoded blue accents */
+body.night .ribbon { background: rgba(210, 60, 50, 0.85); }
+body.night .btn-accent { background: rgba(190, 55, 45, 0.75); }
+body.night .switch.on { background: rgba(190, 55, 45, 0.85); }
+body.night .best-window { background: rgba(255, 80, 70, 0.10); border-color: rgba(255, 80, 70, 0.28); }
