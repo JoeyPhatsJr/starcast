@@ -294,12 +294,12 @@ export function renderTiles(state) {
     t.sub.textContent = 'above 5°';
   }
 
-  // Light Pollution — tap to edit (wired in app.js); keep the pencil glyph
+  // Light Pollution — measured automatically; tap shows details in Settings
   {
     const root = $('tile-bortle');
     root.className = `tile band-${band(scoreMetric('lightPollution', state.prefs.bortle))}`;
     root.querySelector('.t-value').textContent = String(state.prefs.bortle);
-    root.querySelector('.t-sub').textContent = state.prefs.bortleAuto ? 'Bortle · auto' : 'Bortle · manual';
+    root.querySelector('.t-sub').textContent = state.lightPollution ? 'Bortle · measured' : 'Bortle';
   }
 }
 
@@ -773,25 +773,11 @@ export function renderSettings(state) {
       ? `${state.prefs.lat.toFixed(4)}, ${state.prefs.lon.toFixed(4)}`
       : '—';
 
-  document.querySelectorAll('#bortle-chips .chip').forEach((chip) => {
-    if (chip.dataset.bortle === 'auto') {
-      chip.className = 'chip chip-auto' + (state.prefs.bortleAuto ? ' selected' : '');
-      return;
-    }
-    const b = Number(chip.dataset.bortle);
-    const selected = b === state.prefs.bortle;
-    chip.className = 'chip' + (selected ? ` selected band-${band(scoreMetric('lightPollution', b))}` : '');
-  });
-
   const cap = $('bortle-caption');
   const lp = state.lightPollution;
-  if (state.prefs.bortleAuto) {
-    cap.textContent = lp
-      ? `Auto — measured Bortle ${lp.bortle} · ${lp.mpsas.toFixed(2)} mag/arcsec² (World Atlas 2024)`
-      : 'Auto — measuring from the light pollution atlas…';
-  } else {
-    cap.textContent = '1 = pristine dark sky · 9 = inner city — or tap Auto to measure';
-  }
+  cap.textContent = lp
+    ? `Bortle ${lp.bortle} — measured for this location · ${lp.mpsas.toFixed(2)} mag/arcsec² (World Atlas 2024). Set automatically; it updates when your location changes.`
+    : `Measured automatically from the World Atlas 2024 for your location. Currently using Bortle ${state.prefs.bortle}.`;
 
   document.querySelectorAll('#card-units .seg-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.units === state.prefs.units);
@@ -824,13 +810,6 @@ export function renderSearchResults(results, query) {
     }
     ul.appendChild(li);
   }
-}
-
-export function flashBortleCard() {
-  const card = $('card-bortle');
-  card.classList.remove('flash');
-  void card.offsetWidth; // restart the animation
-  card.classList.add('flash');
 }
 
 /* ================= Tonight's sky panel ================= */

@@ -26,7 +26,7 @@ timeline, day tabs for the full 14-day forecast, and 72-hour charts.
   and moon rise/set times and the astronomical-darkness window per day.
 - **Automatic light pollution** — your Bortle class is measured on the fly
   from David Lorenz's World Atlas 2024 zenith-brightness tiles for your exact
-  coordinates (manual override always available).
+  coordinates, and updates whenever your location changes.
 - **Interactive charts** — cloud (total + high), temperature + dew point,
   wind, and seeing/transparency over 24 h / 3 d / 7 d, with touch/hover value
   tooltips, daylight shading, and a "now" marker.

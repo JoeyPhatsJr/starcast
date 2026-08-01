@@ -79,7 +79,7 @@
 
           <div class="tile" id="tile-moon"><div class="t-label">Moon</div><div class="t-value t-moon"><span class="moon-gfx"></span><span class="moon-pct">—</span></div><div class="t-sub"></div></div>
           <div class="tile" id="tile-planets"><div class="t-label">Planets</div><div class="t-value">—</div><div class="t-sub"></div></div>
-          <div class="tile" id="tile-bortle"><span class="pencil" aria-hidden="true">✎</span><div class="t-label">Light Pollution</div><div class="t-value">—</div><div class="t-sub">Bortle</div></div>
+          <div class="tile" id="tile-bortle"><div class="t-label">Light Pollution</div><div class="t-value">—</div><div class="t-sub">Bortle</div></div>
         </div>
 
         <div class="panel" id="tonight-panel">
@@ -160,19 +160,7 @@
 
         <div class="panel" id="card-bortle">
           <h2>Light Pollution</h2>
-          <div id="bortle-chips" class="chips">
-            <button class="chip chip-auto" data-bortle="auto">Auto</button>
-            <button class="chip" data-bortle="1">1</button>
-            <button class="chip" data-bortle="2">2</button>
-            <button class="chip" data-bortle="3">3</button>
-            <button class="chip" data-bortle="4">4</button>
-            <button class="chip" data-bortle="5">5</button>
-            <button class="chip" data-bortle="6">6</button>
-            <button class="chip" data-bortle="7">7</button>
-            <button class="chip" data-bortle="8">8</button>
-            <button class="chip" data-bortle="9">9</button>
-          </div>
-          <p class="dim caption" id="bortle-caption">1 = pristine dark sky · 9 = inner city</p>
+          <p class="dim" id="bortle-caption">Measuring from the light pollution atlas…</p>
         </div>
 
         <div class="panel" id="card-units">
@@ -227,7 +215,7 @@
             <dt>Planets</dt>
             <dd>Which bright planets (Me V Ma J S) are more than 5° above your horizon at the selected hour, from on-device orbital mechanics. Green when 2+ are up, olive for 1, red for none. Doesn't affect the overall score.</dd>
             <dt>Light Pollution</dt>
-            <dd>Your Bortle class. By default Starcast measures it automatically from David Lorenz's World Atlas 2024 zenith-brightness data for your exact coordinates (an estimate — Bortle is a whole-sky visual scale); tap any numbered chip in Settings to override manually, or tap this tile to jump there. Bortle ≤ 2 scores 1.0, ≥ 8 scores 0.0 — green up to Bortle 4, olive 5–6, red 7+.</dd>
+            <dd>Your Bortle class, measured automatically from David Lorenz's World Atlas 2024 zenith-brightness data for your exact coordinates (an estimate — Bortle is a whole-sky visual scale). It updates whenever your location changes. Bortle ≤ 2 scores 1.0, ≥ 8 scores 0.0 — green up to Bortle 4, olive 5–6, red 7+.</dd>
           </dl>
         </div>
         <div class="panel">

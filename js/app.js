@@ -23,7 +23,7 @@ const REFRESH_MS = 30 * 60 * 1000;
 const state = {
   prefs: {
     lat: null, lon: null, name: '', tz: 'America/New_York',
-    bortle: 5, bortleAuto: true, units: 'imperial',
+    bortle: 5, units: 'imperial', // bortle is always the atlas-measured value
     saved: [], night: false, cb: false,
   },
   hours: [],
@@ -61,7 +61,6 @@ function loadPrefs() {
     }
   } catch (e) { /* fall through to defaults */ }
   if (![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(state.prefs.bortle)) state.prefs.bortle = 5;
-  if (typeof state.prefs.bortleAuto !== 'boolean') state.prefs.bortleAuto = true;
   if (!['imperial', 'metric'].includes(state.prefs.units)) state.prefs.units = 'imperial';
   if (!Array.isArray(state.prefs.saved)) state.prefs.saved = [];
   state.prefs.saved = state.prefs.saved
@@ -77,8 +76,9 @@ function loadPrefs() {
 
 function savePrefs() {
   try {
-    const { lat, lon, name, tz, bortle, bortleAuto, units, saved, night, cb } = state.prefs;
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ lat, lon, name, tz, bortle, bortleAuto, units, saved, night, cb }));
+    // bortle persists so an offline start reuses the last measured value.
+    const { lat, lon, name, tz, bortle, units, saved, night, cb } = state.prefs;
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ lat, lon, name, tz, bortle, units, saved, night, cb }));
   } catch (e) { /* private mode — prefs just won't persist */ }
 }
 
@@ -136,7 +136,8 @@ async function refreshLightPollution() {
     const lp = await fetchLightPollution(state.prefs.lat, state.prefs.lon);
     if (seq !== lpSeq) return;
     state.lightPollution = lp;
-    if (state.prefs.bortleAuto && state.prefs.bortle !== lp.bortle) {
+    // Fully automatic: the measured value is always applied.
+    if (state.prefs.bortle !== lp.bortle) {
       state.prefs.bortle = lp.bortle;
       savePrefs();
       if (state.status === 'ready') {
@@ -148,7 +149,7 @@ async function refreshLightPollution() {
     UI.renderSettings(state);
     if (state.status === 'ready') UI.renderTiles(state);
   } catch (e) {
-    // Atlas unreachable or out of coverage — keep the current Bortle value.
+    // Atlas unreachable or out of coverage — keep the last measured value.
     if (seq === lpSeq) UI.renderSettings(state);
   }
 }
@@ -612,34 +613,9 @@ function wireShare() {
 }
 
 function wireSettings() {
-  // Bortle chips — "Auto" measures from the atlas; a number is manual override
-  document.getElementById('bortle-chips').addEventListener('click', (e) => {
-    const chip = e.target.closest('.chip');
-    if (!chip) return;
-    if (chip.dataset.bortle === 'auto') {
-      state.prefs.bortleAuto = true;
-      if (state.lightPollution) {
-        state.prefs.bortle = state.lightPollution.bortle;
-        savePrefs();
-        rescoreAll();
-        renderData();
-      } else {
-        savePrefs();
-        refreshLightPollution();
-      }
-      return;
-    }
-    state.prefs.bortleAuto = false;
-    state.prefs.bortle = Number(chip.dataset.bortle);
-    savePrefs();
-    rescoreAll(); // pure re-score — no fetch needed
-    renderData();
-  });
-
-  // Light Pollution tile → Settings, with the Bortle card flashed
+  // Light Pollution tile → Settings, where the measured value is shown
   document.getElementById('tile-bortle').addEventListener('click', () => {
     location.hash = '#/settings';
-    UI.flashBortleCard();
   });
 
   // Units segmented control (scoped — the Charts range buttons are .seg-btn too)
