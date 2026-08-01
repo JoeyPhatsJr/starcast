@@ -8,6 +8,7 @@
 import { scoreMetric, verdict, band, WEIGHTS } from './score.js';
 import { activeShowers, milkyWayPeak, phaseName, kpNeeded } from './tonight.js';
 import { planetNightEvents } from './astro.js';
+import { nightHoursOf, bestWindowIn } from './logic.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -313,29 +314,7 @@ export function nightHours(state, dayIdx) {
   const next = state.days[dayIdx + 1];
   const noonMs = state.hours[day.hourIndices[0]].time + 12 * 3600000;
   const idxs = day.hourIndices.concat(next ? next.hourIndices : []);
-  return idxs
-    .map((i) => state.hours[i])
-    .filter((h) => h.time >= noonMs && h.time < noonMs + 24 * 3600000 && h.sunAlt < 0);
-}
-
-/** Longest contiguous run of night hours at/above `minScore`. */
-function bestNightWindow(hours, minScore) {
-  let best = null;
-  let run = [];
-  const flush = () => {
-    if (run.length && (!best || run.length > best.length)) best = run;
-    run = [];
-  };
-  for (const h of hours) {
-    if (h.score >= minScore && (run.length === 0 || h.time - run[run.length - 1].time === 3600000)) {
-      run.push(h);
-    } else {
-      flush();
-      if (h.score >= minScore) run = [h];
-    }
-  }
-  flush();
-  return best;
+  return nightHoursOf(idxs.map((i) => state.hours[i]), noonMs);
 }
 
 /* ================= Banner ================= */
@@ -377,10 +356,7 @@ export function renderBanner(state) {
 
 /** The night's best contiguous window, for the banner pill + calendar export. */
 export function bestWindowFor(state) {
-  const night = nightHours(state, state.selectedDay);
-  const good = bestNightWindow(night, 0.66);
-  const win = good || bestNightWindow(night, 0.33);
-  return win ? { hours: win, level: good ? 'good' : 'marginal' } : null;
+  return bestWindowIn(nightHours(state, state.selectedDay));
 }
 
 /* ================= Update toast ================= */
@@ -735,7 +711,7 @@ export function renderForecast(state) {
   ];
 
   let html = '';
-  for (const day of state.days.slice(0, 7)) {
+  for (const day of state.days.slice(0, state.forecastDays || 7)) {
     const hours = day.hourIndices.map((i) => state.hours[i]);
     const first = hours[0];
 
@@ -970,6 +946,33 @@ export function renderTonight(state) {
   }
 }
 
+/* ================= Spot comparison ================= */
+
+export function renderSpotCompare(state) {
+  const panel = $('spots-panel');
+  const body = $('spots-body');
+  if (!state.spotCompare) {
+    panel.classList.add('hidden');
+    return;
+  }
+  body.textContent = '';
+  for (const spot of state.spotCompare) {
+    const row = document.createElement('div');
+    row.className = 'sp-row';
+    const dot = document.createElement('i');
+    dot.className = `sp-dot band-${band(scoreMetric('cloud', spot.cloud))}`;
+    const name = document.createElement('span');
+    name.className = 'sp-name';
+    name.textContent = spot.name;
+    const val = document.createElement('span');
+    val.className = 'sp-val';
+    val.textContent = `${Math.round(spot.cloud)}% cloud`;
+    row.append(dot, name, val);
+    body.appendChild(row);
+  }
+  panel.classList.remove('hidden');
+}
+
 /* ================= Score breakdown ================= */
 
 const METRIC_INFO = [
@@ -1077,12 +1080,17 @@ export function renderSavedLocations(state) {
     const sub = document.createElement('span');
     sub.className = 'sub';
     sub.textContent = `${loc.lat.toFixed(2)}, ${loc.lon.toFixed(2)}`;
+    const ren = document.createElement('button');
+    ren.className = 'loc-del loc-ren';
+    ren.dataset.rename = String(i);
+    ren.setAttribute('aria-label', `Rename ${loc.name}`);
+    ren.textContent = '✎';
     const del = document.createElement('button');
     del.className = 'loc-del';
     del.dataset.del = String(i);
     del.setAttribute('aria-label', `Remove ${loc.name}`);
     del.textContent = '×';
-    li.append(name, sub, del);
+    li.append(name, sub, ren, del);
     ul.appendChild(li);
   }
 }

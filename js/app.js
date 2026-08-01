@@ -4,6 +4,7 @@ import {
   fetchOpenMeteo, fetch7Timer, geocode, parseOpenMeteo,
   nearestAstro, heuristicSeeing, heuristicTransparency,
   fetchAirQuality, fetchCloudModels, fetchPressureWinds, reverseGeocode,
+  fetchCloudOutlook,
 } from './weather.js';
 import {
   sunAltitude, moonAltitude, moonIllumination, visiblePlanets,
@@ -12,6 +13,7 @@ import {
 import { overallScore } from './score.js';
 import { fetchLightPollution } from './lightpollution.js';
 import { fetchKpForecast } from './tonight.js';
+import { parseShareCoords, groupByLocalDate, buildICS, nightCloudMean } from './logic.js';
 import * as UI from './ui.js';
 
 const PREFS_KEY = 'starcast:prefs';
@@ -34,6 +36,8 @@ const state = {
   lightPollution: null, // { ratio, mpsas, bortle } from the atlas, if fetched
   kp: null, // { maxKp, time } from NOAA SWPC, if fetched
   lunations: [], // upcoming new/full moons
+  spotCompare: null, // [{ name, cloud }] tonight's outlook per saved spot
+  forecastDays: 7, // Forecast grid span (7 or 14)
   lastFetch: null, // epoch ms of the last non-cached Open-Meteo success
   offlineData: false, // true when showing the SW's cached fallback
   status: 'loading', // loading | ready | error
@@ -80,23 +84,44 @@ function savePrefs() {
 
 /** Shared links: ?lat=..&lon=..&name=.. opens that location directly. */
 function parseShareParams() {
-  const p = new URLSearchParams(location.search);
-  const latStr = p.get('lat');
-  const lonStr = p.get('lon');
-  // Number(null) and Number('') are both 0 — require real values.
-  if (!latStr || !lonStr) {
-    if (location.search) history.replaceState(null, '', location.pathname + location.hash);
-    return;
-  }
-  const lat = Number(latStr);
-  const lon = Number(lonStr);
-  if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
-    state.prefs.lat = lat;
-    state.prefs.lon = lon;
-    state.prefs.name = (p.get('name') || '').slice(0, 60) || `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+  const coords = parseShareCoords(location.search);
+  if (coords) {
+    Object.assign(state.prefs, coords);
     savePrefs();
   }
   if (location.search) history.replaceState(null, '', location.pathname + location.hash);
+}
+
+/* ================= Spot comparison ================= */
+
+let spotSeq = 0;
+
+/**
+ * "Which of my saved spots is best tonight?" — one lightweight cloud fetch
+ * per saved location, averaged over that spot's night hours (sun below the
+ * horizon there, next 14 h). Fire-and-forget; needs ≥2 saved spots.
+ */
+async function refreshSpotCompare() {
+  const seq = ++spotSeq;
+  const spots = state.prefs.saved;
+  if (spots.length < 2) {
+    state.spotCompare = null;
+    UI.renderSpotCompare(state);
+    return;
+  }
+  const now = Date.now();
+  const results = await Promise.allSettled(spots.map(async (spot) => {
+    const hours = await fetchCloudOutlook(spot.lat, spot.lon);
+    const cloud = nightCloudMean(hours, now, (t) => sunAltitude(new Date(t), spot.lat, spot.lon) < 0);
+    return { name: spot.name, cloud };
+  }));
+  if (seq !== spotSeq) return;
+  const list = results
+    .filter((r) => r.status === 'fulfilled' && r.value.cloud != null)
+    .map((r) => r.value)
+    .sort((a, b) => a.cloud - b.cloud);
+  state.spotCompare = list.length >= 2 ? list : null;
+  UI.renderSpotCompare(state);
 }
 
 /* ================= Light pollution (auto Bortle) ================= */
@@ -241,12 +266,7 @@ function applyShearMap() {
 
 function buildDays() {
   const tz = state.prefs.tz;
-  const byDate = new Map();
-  state.hours.forEach((h, i) => {
-    const key = UI.fmtISODate(h.time, tz);
-    if (!byDate.has(key)) byDate.set(key, []);
-    byDate.get(key).push(i);
-  });
+  const byDate = groupByLocalDate(state.hours.map((h) => h.time), (t) => UI.fmtISODate(t, tz));
   const todayKey = UI.fmtISODate(Date.now(), tz);
   const dailyByKey = new Map(state.daily.map((d) => [UI.fmtISODate(d.date, tz), d]));
   const { lat, lon } = state.prefs;
@@ -379,6 +399,7 @@ async function refetchAll({ silent = false, first = false } = {}) {
     // Fire-and-forget: measured Bortle from the atlas.
     refreshLightPollution();
   }
+  refreshSpotCompare();
 
   const omPromise = fetchOpenMeteo(state.prefs.lat, state.prefs.lon, state.prefs.units);
   // Side-channel fetches run in parallel and NEVER block first paint: each
@@ -703,26 +724,14 @@ function wireCalendarExport() {
     e.stopPropagation(); // the banner click would open the breakdown
     const win = UI.bestWindowFor(state);
     if (!win) return;
-    const startMs = win.hours[0].time;
-    const endMs = win.hours[win.hours.length - 1].time + 3600000;
-    const toICS = (ms) => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-    const esc = (s) => String(s).replace(/([,;\\])/g, '\\$1');
-    const name = state.prefs.name || 'your location';
-    const ics = [
-      'BEGIN:VCALENDAR',
-      'VERSION:2.0',
-      'PRODID:-//Starcast//EN',
-      'BEGIN:VEVENT',
-      `UID:starcast-${startMs}@starcast`,
-      `DTSTAMP:${toICS(Date.now())}`,
-      `DTSTART:${toICS(startMs)}`,
-      `DTEND:${toICS(endMs)}`,
-      `SUMMARY:${esc(`Stargazing — ${win.level} window (Starcast)`)}`,
-      `DESCRIPTION:${esc(`Forecast ${win.level} stargazing window at ${name}. ${location.origin}${location.pathname}`)}`,
-      `LOCATION:${esc(name)}`,
-      'END:VEVENT',
-      'END:VCALENDAR',
-    ].join('\r\n');
+    const ics = buildICS({
+      startMs: win.hours[0].time,
+      endMs: win.hours[win.hours.length - 1].time + 3600000,
+      level: win.level,
+      name: state.prefs.name || 'your location',
+      url: location.origin + location.pathname,
+      nowMs: Date.now(),
+    });
     const blob = new Blob([ics], { type: 'text/calendar' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -743,16 +752,37 @@ function wireSavedLocations() {
       state.prefs.saved.unshift({ name: name || `${lat.toFixed(3)}, ${lon.toFixed(3)}`, lat, lon });
       state.prefs.saved = state.prefs.saved.slice(0, 8);
       savePrefs();
+      refreshSpotCompare();
     }
     UI.renderSavedLocations(state);
   });
 
   document.getElementById('saved-locs').addEventListener('click', (e) => {
+    const ren = e.target.closest('[data-rename]');
+    if (ren) {
+      const i = Number(ren.dataset.rename);
+      const loc = state.prefs.saved[i];
+      if (!loc) return;
+      const name = prompt('Rename this spot', loc.name);
+      if (name && name.trim()) {
+        loc.name = name.trim().slice(0, 40);
+        // If it's the current location, rename that too.
+        if (Math.abs(loc.lat - state.prefs.lat) < 0.005 && Math.abs(loc.lon - state.prefs.lon) < 0.005) {
+          state.prefs.name = loc.name;
+        }
+        savePrefs();
+        UI.renderSettings(state);
+        UI.renderSavedLocations(state);
+        refreshSpotCompare();
+      }
+      return;
+    }
     const del = e.target.closest('[data-del]');
     if (del) {
       state.prefs.saved.splice(Number(del.dataset.del), 1);
       savePrefs();
       UI.renderSavedLocations(state);
+      refreshSpotCompare();
       return;
     }
     const li = e.target.closest('li[data-idx]');
@@ -786,6 +816,17 @@ function wireAppearance() {
 }
 
 function wireMisc() {
+  // Forecast grid span (7 / 14 days)
+  document.getElementById('fc-range').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-days]');
+    if (!btn) return;
+    state.forecastDays = Number(btn.dataset.days);
+    document.querySelectorAll('#fc-range .seg-btn').forEach((b) => {
+      b.classList.toggle('active', b === btn);
+    });
+    if (state.status === 'ready') UI.renderForecast(state);
+  });
+
   // Charts range selector (24h / 3d / 7d)
   document.getElementById('chart-range').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-range]');

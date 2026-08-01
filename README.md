@@ -55,8 +55,10 @@ timeline, day tabs for the full 14-day forecast, and 72-hour charts.
   a 2×2 chart dashboard and two-column settings.
 - **Explainable score** — tap the verdict banner for a metric-by-metric
   breakdown showing each factor's weight, score, and any hard caps applied.
-- **Saved locations & shareable links** — keep up to 8 favorite spots and
-  share URLs that open your exact location (`?lat=…&lon=…&name=…`).
+- **Saved locations & shareable links** — keep up to 8 favorite spots
+  (renamable), compare them with a "Your spots tonight" cloud outlook to pick
+  where to drive, and share URLs that open your exact location
+  (`?lat=…&lon=…&name=…`).
 - **Accessibility** — optional color-blind-safe palette (blue/amber/
   vermillion), screen-reader announcements for the verdict, keyboard
   scrubbing on the timeline.
@@ -81,7 +83,7 @@ timeline, day tabs for the full 14-day forecast, and 72-hour charts.
 - **[BigDataCloud](https://www.bigdatacloud.com/)** — free reverse geocoding,
   used only to put a real place name on your GPS position.
 
-## Tests
+## Tests & CI
 
 ```bash
 npm test   # node --test — no dependencies to install
@@ -89,7 +91,10 @@ npm test   # node --test — no dependencies to install
 
 Pins the ephemeris math (solar altitude, lunation solver self-consistency,
 planet visibility), the full scoring table with its hard caps, the Bortle
-decode thresholds, and the Tonight's Sky helpers.
+decode thresholds, the Tonight's Sky helpers, and the pure app logic in
+`js/logic.js` (share-link parsing, DST 23/25-hour day grouping, night-window
+selection, ICS generation). GitHub Actions runs the suite on every push and
+fails the build if app files change without a `sw.js` VERSION bump.
 
 All displayed times use the forecast location's timezone (as reported by
 Open-Meteo), never your browser's.

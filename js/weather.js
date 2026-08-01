@@ -266,6 +266,28 @@ export async function fetchPressureWinds(lat, lon) {
 }
 
 /**
+ * Lightweight cloud-only outlook for comparing saved spots: next 48 h of
+ * hourly cloud cover at a coordinate. Returns [{ time, cloud }].
+ */
+export async function fetchCloudOutlook(lat, lon) {
+  const params = new URLSearchParams({
+    latitude: lat,
+    longitude: lon,
+    hourly: 'cloud_cover',
+    forecast_days: '2',
+    timeformat: 'unixtime',
+    timezone: 'auto',
+  });
+  const res = await fetch(`${OM_FORECAST}?${params}`);
+  if (!res.ok) throw new Error(`Cloud outlook HTTP ${res.status}`);
+  const d = await res.json();
+  return (d.hourly?.time || []).map((t, i) => ({
+    time: t * 1000,
+    cloud: d.hourly.cloud_cover?.[i] ?? 100,
+  }));
+}
+
+/**
  * Reverse geocode for naming the user's GPS position (BigDataCloud's free
  * client endpoint — keyless, CORS-open). 4-second timeout; callers fall
  * back to a generic label on any failure.

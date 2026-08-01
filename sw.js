@@ -7,7 +7,7 @@
 // NOTE FOR DEPLOYS: bump VERSION whenever app files change, so clients
 // drop the old precache on their next visit.
 
-const VERSION = 'starcast-v5';
+const VERSION = 'starcast-v6';
 const DATA_CACHE = `${VERSION}-data`;
 
 const SHELL = [
@@ -21,6 +21,7 @@ const SHELL = [
   './js/score.js',
   './js/lightpollution.js',
   './js/tonight.js',
+  './js/logic.js',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',

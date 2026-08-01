@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+
+  # The service worker precaches the app shell keyed by its VERSION constant.
+  # If app files change without a VERSION bump, existing users keep the stale
+  # shell for an extra visit — fail loudly instead of shipping that silently.
+  sw-version-guard:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Require sw.js VERSION bump when app files change
+        run: |
+          if ! git rev-parse HEAD~1 >/dev/null 2>&1; then
+            echo "First commit — nothing to compare."
+            exit 0
+          fi
+          CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          echo "Changed files:"
+          echo "$CHANGED"
+          if echo "$CHANGED" | grep -qE '^(index\.html|css/|js/|manifest\.webmanifest)'; then
+            if ! git diff HEAD~1 HEAD -- sw.js | grep -q '^[+-]const VERSION'; then
+              echo "::error file=sw.js::App files changed but sw.js VERSION was not bumped — clients will keep the stale cached shell."
+              exit 1
+            fi
+          fi
+          echo "OK"

@@ -42,7 +42,7 @@
           <button id="notice-close" aria-label="Dismiss notice">×</button>
         </div>
 
-        <div id="banner" class="banner" role="button" tabindex="0" aria-label="Show score breakdown">
+        <div id="banner" class="banner" role="button" tabindex="0" title="Tap for the score breakdown">
           <span id="live-ribbon" class="ribbon hidden">LIVE</span>
           <span class="info-hint" aria-hidden="true">ⓘ</span>
           <div id="verdict" class="verdict-text" aria-live="polite">Loading forecast…</div>
@@ -52,7 +52,7 @@
         </div>
 
         <div id="breakdown" class="panel hidden">
-          <h3>Why this score?</h3>
+          <h2>Why this score?</h2>
           <div id="breakdown-body"></div>
         </div>
 
@@ -83,8 +83,14 @@
         </div>
 
         <div class="panel" id="tonight-panel">
-          <h3 id="tonight-title">Tonight's sky</h3>
+          <h2 id="tonight-title">Tonight's sky</h2>
           <div id="tonight-body"></div>
+        </div>
+
+        <div class="panel hidden" id="spots-panel">
+          <h2>Your spots tonight</h2>
+          <div id="spots-body"></div>
+          <p class="dim caption">Mean cloud cover over each spot's night hours (next 14 h).</p>
         </div>
       </section>
 
@@ -100,6 +106,10 @@
 
       <!-- ============ FORECAST (Clear Outside-style hourly grid) ============ -->
       <section id="view-forecast" class="view hidden">
+        <div class="segmented chart-range" id="fc-range">
+          <button class="seg-btn active" data-days="7">7 days</button>
+          <button class="seg-btn" data-days="14">14 days</button>
+        </div>
         <div id="forecast-days"></div>
       </section>
 
@@ -110,17 +120,17 @@
           <button class="seg-btn active" data-range="72">3 days</button>
           <button class="seg-btn" data-range="168">7 days</button>
         </div>
-        <div class="panel"><h3 id="chart-cloud-title">Cloud Cover (%)<span class="chart-legend" id="chart-cloud-legend"></span></h3><div class="chart" id="chart-cloud"></div></div>
-        <div class="panel"><h3 id="chart-temp-title">Temperature (°F)<span class="chart-legend" id="chart-temp-legend"></span></h3><div class="chart" id="chart-temp"></div></div>
-        <div class="panel"><h3 id="chart-wind-title">Wind (mph)<span class="chart-legend" id="chart-wind-legend"></span></h3><div class="chart" id="chart-wind"></div></div>
-        <div class="panel"><h3>Seeing &amp; Transparency<span class="chart-legend" id="chart-astro-legend"></span></h3><div class="chart" id="chart-astro"></div></div>
+        <div class="panel"><h2 id="chart-cloud-title">Cloud Cover (%)<span class="chart-legend" id="chart-cloud-legend"></span></h2><div class="chart" id="chart-cloud"></div></div>
+        <div class="panel"><h2 id="chart-temp-title">Temperature (°F)<span class="chart-legend" id="chart-temp-legend"></span></h2><div class="chart" id="chart-temp"></div></div>
+        <div class="panel"><h2 id="chart-wind-title">Wind (mph)<span class="chart-legend" id="chart-wind-legend"></span></h2><div class="chart" id="chart-wind"></div></div>
+        <div class="panel"><h2>Seeing &amp; Transparency<span class="chart-legend" id="chart-astro-legend"></span></h2><div class="chart" id="chart-astro"></div></div>
         <p class="dim chart-hint">Touch or hover a chart for exact values. Gold-tinted columns are daylight; the dashed blue line is now.</p>
       </section>
 
       <!-- ============ SETTINGS ============ -->
       <section id="view-settings" class="view hidden">
         <div class="panel" id="card-location">
-          <h3>Location</h3>
+          <h2>Location</h2>
           <div class="loc-row">
             <div>
               <div id="loc-name">—</div>
@@ -137,7 +147,7 @@
         </div>
 
         <div class="panel" id="card-appearance">
-          <h3>Appearance</h3>
+          <h2>Appearance</h2>
           <div class="toggle-row">
             <div><div class="tg-label">Red night mode</div><div class="dim tg-sub">Preserves your dark adaptation at the eyepiece</div></div>
             <button id="toggle-night" class="switch" role="switch" aria-checked="false" aria-label="Red night mode"><i></i></button>
@@ -149,7 +159,7 @@
         </div>
 
         <div class="panel" id="card-bortle">
-          <h3>Light Pollution</h3>
+          <h2>Light Pollution</h2>
           <div id="bortle-chips" class="chips">
             <button class="chip chip-auto" data-bortle="auto">Auto</button>
             <button class="chip" data-bortle="1">1</button>
@@ -166,7 +176,7 @@
         </div>
 
         <div class="panel" id="card-units">
-          <h3>Units</h3>
+          <h2>Units</h2>
           <div class="segmented">
             <button id="unit-imperial" class="seg-btn" data-units="imperial">°F / mph</button>
             <button id="unit-metric" class="seg-btn" data-units="metric">°C / km/h</button>
@@ -174,7 +184,7 @@
         </div>
 
         <div class="panel">
-          <h3>About</h3>
+          <h2>About</h2>
           <p class="dim">Weather data by <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> · Seeing &amp; transparency by <a href="https://www.7timer.info" target="_blank" rel="noopener">7Timer!</a> · Light pollution from <a href="https://djlorenz.github.io/astronomy/lp/" target="_blank" rel="noopener">David Lorenz's World Atlas 2024</a></p>
           <p class="dim">Inspired by the iOS app Good To Stargaze. Not affiliated.</p>
         </div>
@@ -183,14 +193,14 @@
       <!-- ============ HELP ============ -->
       <section id="view-help" class="view hidden">
         <div class="panel">
-          <h3>How Starcast works</h3>
+          <h2>How Starcast works</h2>
           <p class="help-p">Starcast blends the hourly weather forecast, the sun and moon's computed positions, and your local light pollution into a single 0–1 stargazing score for every hour of the next two weeks. Pick a day, scrub to an hour, and every tile updates to that exact moment. Swipe left or right on the tile grid to change days; the dot under each day tab shows how good that night gets. Tap the verdict banner to see exactly how the score was built, metric by metric.</p>
           <p class="help-p">The Tonight's Sky card tracks the moon phase and upcoming new/full moons, the Milky Way core's peak altitude, when each visible planet rises and peaks, active meteor showers (with a warning when moonlight will wash them out), the aurora outlook when it matters for your latitude, and whether the major weather models actually agree about tonight's clouds. Transparency estimates use measured aerosol optical depth, and seeing estimates use measured jet-stream winds, whenever those are available. The 📅 button on the best-window pill saves that window to your calendar.</p>
           <p class="help-p">The eclipse button in the header switches to <strong>red night mode</strong> — the entire app drops to deep red on black to preserve your eyes' dark adaptation at the telescope (in red mode, brighter red = better conditions). A color-blind-friendly palette is available under Settings → Appearance, and Settings can save multiple locations for quick switching.</p>
           <p class="help-p">Tip: add Starcast to your home screen (Share → Add to Home Screen) for a full-screen app that opens instantly and keeps working offline with your last-fetched forecast — handy at dark-sky sites with no signal.</p>
         </div>
         <div class="panel">
-          <h3>The verdict &amp; tiles</h3>
+          <h2>The verdict &amp; tiles</h2>
           <dl class="help-dl">
             <dt>Verdict banner</dt>
             <dd>A weighted blend of every metric below (cloud cover counts most at 30%, darkness 20%, precipitation 12%, moon 10%, and so on). Score ≥ 0.66 is "Good To Stargaze", 0.33–0.66 is "Marginal Stargazing", below 0.33 is "Not Good To Stargaze". Hard caps: daylight caps the score at 0.25, ≥ 90% cloud caps it at 0.20, and ≥ 70% precipitation probability caps it at 0.25 — it is never "Good" while the sun is up or the sky is socked in.</dd>
@@ -221,11 +231,11 @@
           </dl>
         </div>
         <div class="panel">
-          <h3>Forecast grid &amp; charts</h3>
+          <h2>Forecast grid &amp; charts</h2>
           <p class="help-p">The Forecast tab shows a Clear Outside-style hour-by-hour grid for the next 7 days: every row is a metric, every column an hour, every cell colored by the same green/olive/red thresholds listed above. Day headers show sun and moon rise/set times and the astronomical-darkness window (sun below −18°). The Sky row is the overall verdict per hour. On Charts, touch or hover any chart for exact values, switch between 24-hour, 3-day, and 7-day ranges, and read the gold-tinted columns as daylight.</p>
         </div>
         <div class="panel">
-          <h3>Color legend</h3>
+          <h2>Color legend</h2>
           <table class="legend">
             <tr><td class="sw band-good"></td><td>Good — score ≥ 0.66</td></tr>
             <tr><td class="sw band-marginal"></td><td>Marginal — score 0.33 to 0.66</td></tr>

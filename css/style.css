@@ -474,7 +474,7 @@ main {
   margin-bottom: 12px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
-.panel h3 {
+.panel h2 {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -483,7 +483,7 @@ main {
   margin-bottom: 12px;
   letter-spacing: 0.3px;
 }
-.panel h3::before {
+.panel h2::before {
   content: '';
   width: 3px;
   height: 13px;
@@ -956,7 +956,7 @@ body.loading .meter { visibility: hidden; }
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     /* Leftover height (the tiles column is tall) lands in the final row,
        not stretched across the scrubber/tabs rows. */
-    grid-template-rows: auto auto auto auto auto auto 1fr;
+    grid-template-rows: auto auto auto auto auto auto auto 1fr;
     column-gap: 20px;
     align-content: start;
     grid-template-areas:
@@ -966,11 +966,13 @@ body.loading .meter { visibility: hidden; }
       "thead tiles"
       "strip tiles"
       "tabs tiles"
-      "tonight tiles";
+      "tonight tiles"
+      "spots tiles";
   }
   #view-conditions > .timeline-head,
   #view-conditions > #timeline-strip,
   #view-conditions > #day-tabs { align-self: start; }
+  #view-conditions > #spots-panel { grid-area: spots; align-self: start; }
   #view-conditions > #notice { grid-area: notice; }
   #view-conditions > #banner { grid-area: banner; }
   #view-conditions > #breakdown { grid-area: breakdown; }
@@ -1107,3 +1109,37 @@ body.night .update-toast { background: #8a2019; color: var(--text); }
 .cal-btn { font-size: 13px; line-height: 1; padding: 1px 2px; border-radius: 5px; }
 .cal-btn:hover { background: rgba(255, 255, 255, 0.15); }
 body.night .cal-btn { filter: sepia(1) saturate(5) hue-rotate(-38deg) brightness(0.7); }
+
+/* ---------- Spot comparison ---------- */
+.sp-row {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 5px 0;
+  font-size: 13px;
+}
+.sp-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; align-self: center; }
+.sp-dot.band-good { background: var(--good); filter: brightness(1.3); }
+.sp-dot.band-marginal { background: var(--marginal); filter: brightness(1.15); }
+.sp-dot.band-bad { background: var(--bad); }
+.sp-name { font-weight: 600; }
+.sp-val { margin-left: auto; color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: 12px; }
+.loc-ren { font-size: 13px; }
+
+/* ---------- Touch-target & CLS hygiene (Lighthouse) ---------- */
+.loc-del, .notice button {
+  min-width: 26px;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.cal-btn {
+  min-width: 24px;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.timeline-head { min-height: 20px; }
+#tonight-body { min-height: 150px; } /* reserve space before async rows land */
