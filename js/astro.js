@@ -90,12 +90,18 @@ function moonEcliptic(jd) {
   };
 }
 
-/** Lunar altitude in degrees for a Date + observer. */
+/**
+ * Lunar altitude in degrees for a Date + observer, with the topocentric
+ * parallax correction (−HP·cos alt, HP ≈ 0.952° at mean distance) — the
+ * moon is close enough that the observer's position on Earth shifts it by
+ * up to a degree, which moves rise/set times by ~10 minutes.
+ */
 export function moonAltitude(date, lat, lon) {
   const jd = julianDate(date);
   const { lam, bet } = moonEcliptic(jd);
   const { ra, dec } = eclToEq(lam, bet, jd);
-  return altitudeOf(ra, dec, jd, lat, lon);
+  const geo = altitudeOf(ra, dec, jd, lat, lon);
+  return geo - 0.952 * cos(geo);
 }
 
 /**

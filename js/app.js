@@ -497,12 +497,15 @@ function applyRoute() {
   if (state.status === 'ready') {
     if (route === 'charts') UI.renderCharts(state);
     if (route === 'forecast') UI.renderForecast(state);
+    // Re-center the active day tab — centering math needs a visible scroller.
+    if (route === 'conditions') UI.renderDayTabs(state);
   }
 }
 
 /* ================= Interactions ================= */
 
 function setHour(pos) {
+  if (!Number.isFinite(pos)) return; // e.g. a scrub computed against a hidden strip
   const day = state.days[state.selectedDay];
   if (!day) return;
   const clamped = Math.max(0, Math.min(day.hourIndices.length - 1, pos));
@@ -734,23 +737,43 @@ function wireSavedLocations() {
   });
 
   document.getElementById('saved-locs').addEventListener('click', (e) => {
+    if (e.target.closest('input')) return; // editing in progress — don't switch
     const ren = e.target.closest('[data-rename]');
     if (ren) {
+      const li = ren.closest('li');
+      if (li.querySelector('input')) return;
       const i = Number(ren.dataset.rename);
       const loc = state.prefs.saved[i];
       if (!loc) return;
-      const name = prompt('Rename this spot', loc.name);
-      if (name && name.trim()) {
-        loc.name = name.trim().slice(0, 40);
-        // If it's the current location, rename that too.
-        if (Math.abs(loc.lat - state.prefs.lat) < 0.005 && Math.abs(loc.lon - state.prefs.lon) < 0.005) {
-          state.prefs.name = loc.name;
+      // Inline rename: swap the name for an input; Enter/blur commits,
+      // Escape cancels.
+      const nameSpan = li.querySelector('span');
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = loc.name;
+      input.maxLength = 40;
+      input.className = 'rename-input';
+      nameSpan.replaceWith(input);
+      input.focus();
+      input.select();
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') input.blur();
+        if (ev.key === 'Escape') { input.value = ''; input.blur(); }
+      });
+      input.addEventListener('blur', () => {
+        const name = input.value.trim();
+        if (name) {
+          loc.name = name.slice(0, 40);
+          // If it's the current location, rename that too.
+          if (Math.abs(loc.lat - state.prefs.lat) < 0.005 && Math.abs(loc.lon - state.prefs.lon) < 0.005) {
+            state.prefs.name = loc.name;
+          }
+          savePrefs();
+          refreshSpotCompare();
         }
-        savePrefs();
         UI.renderSettings(state);
         UI.renderSavedLocations(state);
-        refreshSpotCompare();
-      }
+      }, { once: true });
       return;
     }
     const del = e.target.closest('[data-del]');
@@ -792,6 +815,19 @@ function wireAppearance() {
 }
 
 function wireMisc() {
+  // Tap any hour cell in the Forecast grid → jump Conditions to that
+  // exact day + hour.
+  document.getElementById('forecast-days').addEventListener('click', (e) => {
+    const cell = e.target.closest('td');
+    const fcDay = e.target.closest('.fc-day');
+    if (!cell || !fcDay || state.status !== 'ready') return;
+    const pos = cell.cellIndex - 1; // cell 0 is the sticky row label
+    if (pos < 0) return;
+    setDay(Number(fcDay.dataset.day));
+    setHour(pos);
+    location.hash = '#/';
+  });
+
   // Forecast grid span (7 / 14 days)
   document.getElementById('fc-range').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-days]');

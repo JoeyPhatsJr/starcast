@@ -108,6 +108,20 @@ export function buildICS({ startMs, endMs, level, name, url, nowMs }) {
 }
 
 /**
+ * First night hour where dew on optics becomes likely: temp−dewpoint
+ * spread under 4 °F ("dew possible"), under 2.5 °F ("heavy dew likely").
+ * `spreadToF` converts the records' display-unit spread to °F (1.8 when
+ * metric). Returns { time, heavy } or null for a dry night.
+ */
+export function dewRiskStart(nightHrs, spreadToF) {
+  for (const h of nightHrs) {
+    const spreadF = (h.temp - h.dewPoint) * spreadToF;
+    if (spreadF < 4) return { time: h.time, heavy: spreadF < 2.5 };
+  }
+  return null;
+}
+
+/**
  * Mean cloud cover over a night, for comparing saved spots. `cloudHours` is
  * [{ time, cloud }], `isNight` decides per-timestamp (sun-altitude test in
  * the app). Looks at [fromMs, fromMs + 14h]. Returns null when the span has

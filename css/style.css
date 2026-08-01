@@ -1336,3 +1336,26 @@ body.night .ribbon { background: rgba(210, 60, 50, 0.85); }
 body.night .btn-accent { background: rgba(190, 55, 45, 0.75); }
 body.night .switch.on { background: rgba(190, 55, 45, 0.85); }
 body.night .best-window { background: rgba(255, 80, 70, 0.10); border-color: rgba(255, 80, 70, 0.28); }
+
+/* ---------- Time-of-day hero sky (follows the scrubbed hour) ---------- */
+body.sky-day:not(.night) {
+  background: linear-gradient(180deg, #50709f 0%, #35507f 30%, #182642 68%, #0a1222 100%);
+}
+body.sky-twilight:not(.night) {
+  background: linear-gradient(180deg, #6b4f63 0%, #4a3a66 28%, #1d2546 62%, #0a1120 100%);
+}
+
+/* ---------- Forecast grid tap-through + inline rename ---------- */
+.fc-grid td { cursor: pointer; }
+.rename-input {
+  font: inherit;
+  font-size: 16px; /* <16px would trigger iOS focus zoom */
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  padding: 3px 8px;
+  width: 55%;
+  min-width: 120px;
+  outline: none;
+}

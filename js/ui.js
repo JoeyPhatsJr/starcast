@@ -8,7 +8,7 @@
 import { scoreMetric, verdict, band, WEIGHTS } from './score.js';
 import { activeShowers, milkyWayPeak, phaseName, kpNeeded } from './tonight.js';
 import { planetNightEvents } from './astro.js';
-import { nightHoursOf, bestWindowIn } from './logic.js';
+import { nightHoursOf, bestWindowIn, dewRiskStart } from './logic.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -332,6 +332,10 @@ export function renderBanner(state) {
   const now = Date.now();
   const isLive = now >= h.time && now < h.time + 3600000;
   $('live-ribbon').classList.toggle('hidden', !isLive);
+
+  // The hero sky reacts to the scrubbed hour: day, twilight, or deep night.
+  document.body.classList.toggle('sky-day', h.sunAlt > 0);
+  document.body.classList.toggle('sky-twilight', h.sunAlt <= 0 && h.sunAlt > -12);
 
   // Best stargazing window for the selected day's night — the single most
   // useful line for a glance on the way out the door.
@@ -711,7 +715,7 @@ export function renderForecast(state) {
   ];
 
   let html = '';
-  for (const day of state.days.slice(0, state.forecastDays || 7)) {
+  for (const [di, day] of state.days.slice(0, state.forecastDays || 7).entries()) {
     const hours = day.hourIndices.map((i) => state.hours[i]);
     const first = hours[0];
 
@@ -746,7 +750,7 @@ export function renderForecast(state) {
     }
 
     html +=
-      `<div class="panel fc-day">` +
+      `<div class="panel fc-day" data-day="${di}">` +
       `<div class="fc-head">` +
       `<div class="fc-title">${day.label === 'Today' ? 'Today' : fmtWeekdayLong(first.time, tz)} · ${fmtISODate(first.time, tz)}</div>` +
       `<div class="fc-meta"><span>${sunPart}</span><span>${moonPart}</span><span>${darkPart}</span></div>` +
@@ -888,6 +892,19 @@ export function renderTonight(state) {
         : `${s.name} active (ZHR ${s.zhr}, peak ${peakDate})${moonNote}`,
       cls: s.atPeak ? 'tn-good' : '',
     });
+  }
+
+  // Dew on optics — the telescope-owner's silent enemy
+  {
+    const metric = state.prefs.units === 'metric';
+    const risk = dewRiskStart(night, metric ? 1.8 : 1);
+    if (risk) {
+      rows.push({
+        ic: '💧',
+        text: `${risk.heavy ? 'Heavy dew likely' : 'Dew possible'} on optics from ${fmtTime(risk.time, tz)}`,
+        cls: risk.heavy ? 'tn-warn' : '',
+      });
+    }
   }
 
   // Aurora outlook (only when meaningful for the latitude)

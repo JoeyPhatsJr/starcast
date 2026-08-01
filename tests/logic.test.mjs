@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseShareCoords, groupByLocalDate, nightHoursOf,
-  bestRun, bestWindowIn, buildICS, icsEscape, nightCloudMean,
+  bestRun, bestWindowIn, buildICS, icsEscape, nightCloudMean, dewRiskStart,
 } from '../js/logic.js';
 
 /* ================= Share-param parsing ================= */
@@ -135,6 +135,24 @@ test('buildICS: valid structure, UTC stamps, escaped text, CRLF', () => {
 
 test('icsEscape covers backslash too', () => {
   assert.equal(icsEscape('a\\b,c;d'), 'a\\\\b\\,c\\;d');
+});
+
+/* ================= Dew risk ================= */
+
+test('dewRiskStart: finds the first risky hour, grades severity, handles metric', () => {
+  const t0 = Date.parse('2026-08-01T02:00:00Z');
+  const night = [
+    { time: t0, temp: 70, dewPoint: 60 }, // spread 10°F — dry
+    { time: t0 + H, temp: 66, dewPoint: 63 }, // spread 3°F — dew possible
+    { time: t0 + 2 * H, temp: 64, dewPoint: 63 }, // spread 1°F — heavy
+  ];
+  const risk = dewRiskStart(night, 1);
+  assert.deepEqual(risk, { time: t0 + H, heavy: false });
+  // Metric records: 2°C spread = 3.6°F → "possible", not "heavy"
+  const metricNight = [{ time: t0, temp: 14, dewPoint: 12 }];
+  assert.deepEqual(dewRiskStart(metricNight, 1.8), { time: t0, heavy: false });
+  // Dry night → null
+  assert.equal(dewRiskStart([{ time: t0, temp: 70, dewPoint: 50 }], 1), null);
 });
 
 /* ================= Spot comparison ================= */
