@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {
   julianDate, sunAltitude, moonAltitude, moonIllumination,
   visiblePlanets, nextLunations, altitudeCrossings, planetNightEvents,
-  altitudeOf, horizontalOf,
+  altitudeOf, horizontalOf, skyBodies,
 } from '../js/astro.js';
 import { heuristicSeeing } from '../js/weather.js';
 import { scoreMetric, overallScore, verdict, band, WEIGHTS } from '../js/score.js';
@@ -184,4 +184,39 @@ test('altitudeOf still matches horizontalOf.alt exactly', () => {
   const jd = julianDate(new Date('2026-03-15T02:00:00Z'));
   const alt = altitudeOf(101.29, -16.72, jd, NYC.lat, NYC.lon); // Sirius
   assert.equal(alt, horizontalOf(101.29, -16.72, jd, NYC.lat, NYC.lon).alt);
+});
+
+/* ================= skyBodies ================= */
+
+test('skyBodies returns 7 finite bodies in canonical order', () => {
+  const d = new Date('2026-08-01T04:00:00Z');
+  const bodies = skyBodies(d, NYC.lat, NYC.lon);
+  assert.equal(bodies.length, 7);
+  assert.deepEqual(bodies.map((b) => b.abbr), ['Sun', 'Moon', 'Me', 'V', 'Ma', 'J', 'S']);
+  for (const b of bodies) {
+    for (const k of ['ra', 'dec', 'alt', 'az']) assert.ok(Number.isFinite(b[k]), `${b.abbr}.${k}`);
+    assert.ok(b.az >= 0 && b.az < 360, `${b.abbr} az ${b.az}`);
+  }
+});
+
+test('skyBodies moon altitude matches moonAltitude()', () => {
+  const d = new Date('2026-08-01T04:00:00Z');
+  const moon = skyBodies(d, NYC.lat, NYC.lon).find((b) => b.kind === 'moon');
+  assert.ok(Math.abs(moon.alt - moonAltitude(d, NYC.lat, NYC.lon)) < 0.05, `${moon.alt}`);
+});
+
+test('skyBodies planets above 5° agree with visiblePlanets()', () => {
+  const d = new Date('2026-08-01T04:00:00Z');
+  const up = skyBodies(d, NYC.lat, NYC.lon)
+    .filter((b) => b.kind === 'planet' && b.alt > 5)
+    .map((b) => b.abbr);
+  assert.deepEqual(up, visiblePlanets(d, NYC.lat, NYC.lon));
+});
+
+test('sun is due south at NYC solar noon and east in the morning', () => {
+  const noonSun = skyBodies(new Date('2026-08-01T17:00:00Z'), NYC.lat, NYC.lon)[0];
+  assert.ok(Math.abs(noonSun.az - 180) < 10, `noon az ${noonSun.az}`);
+  assert.ok(noonSun.alt > 55 && noonSun.alt < 75, `noon alt ${noonSun.alt}`);
+  const amSun = skyBodies(new Date('2026-08-01T10:30:00Z'), NYC.lat, NYC.lon)[0];
+  assert.ok(amSun.az > 50 && amSun.az < 110, `morning az ${amSun.az}`);
 });
