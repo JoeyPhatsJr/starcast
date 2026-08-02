@@ -14,6 +14,7 @@ import { overallScore } from './score.js';
 import { fetchLightPollution } from './lightpollution.js';
 import { fetchKpForecast } from './tonight.js';
 import { parseShareCoords, groupByLocalDate, buildICS, nightCloudMean } from './logic.js';
+import { dragView, zoomView } from './skymap.js';
 import * as UI from './ui.js';
 
 const PREFS_KEY = 'starcast:prefs';
@@ -41,6 +42,9 @@ const state = {
   lastFetch: null, // epoch ms of the last non-cached Open-Meteo success
   offlineData: false, // true when showing the SW's cached fallback
   status: 'loading', // loading | ready | error
+  sky: { az: 180, alt: 25, fov: 70 }, // Sky tab view direction/zoom
+  skyData: null, // star/constellation catalog, lazy-fetched on first Sky visit
+  skyDataError: false, // true when the last sky.json fetch attempt failed
 };
 
 let route = 'conditions';
@@ -360,6 +364,7 @@ function renderSelection() {
   UI.renderBanner(state);
   UI.renderTiles(state);
   UI.updatePlayhead(state);
+  if (route === 'sky') UI.renderSky(state);
 }
 
 function renderSelectionExtras() {
@@ -487,9 +492,32 @@ async function refetchAll({ silent = false, first = false } = {}) {
   // Silent refresh failure: keep showing the data we already have.
 }
 
+/* ================= Sky map catalog (lazy, fire-and-forget) ================= */
+
+let skyDataPromise = null;
+function ensureSkyData() {
+  if (state.skyData || skyDataPromise) return;
+  state.skyDataError = false;
+  skyDataPromise = fetch('./data/sky.json')
+    .then((r) => {
+      if (!r.ok) throw new Error(`sky.json ${r.status}`);
+      return r.json();
+    })
+    .then((data) => {
+      state.skyData = data;
+      state.skyDataError = false;
+      if (route === 'sky') UI.renderSky(state);
+    })
+    .catch(() => {
+      skyDataPromise = null; // allow retry on next visit to the tab
+      state.skyDataError = true;
+      if (route === 'sky') UI.renderSky(state);
+    });
+}
+
 /* ================= Routing ================= */
 
-const ROUTES = { '': 'conditions', '#/': 'conditions', '#/forecast': 'forecast', '#/charts': 'charts', '#/settings': 'settings', '#/help': 'help' };
+const ROUTES = { '': 'conditions', '#/': 'conditions', '#/sky': 'sky', '#/forecast': 'forecast', '#/charts': 'charts', '#/settings': 'settings', '#/help': 'help' };
 
 function applyRoute() {
   route = ROUTES[location.hash] || 'conditions';
@@ -500,6 +528,9 @@ function applyRoute() {
     // Re-center the active day tab — centering math needs a visible scroller.
     if (route === 'conditions') UI.renderDayTabs(state);
   }
+  // Sky renders bodies + horizon from the system clock even before/without
+  // forecast data, so it doesn't gate on state.status.
+  if (route === 'sky') { ensureSkyData(); UI.renderSky(state); }
 }
 
 /* ================= Interactions ================= */
@@ -814,6 +845,72 @@ function wireAppearance() {
   });
 }
 
+let skyRaf = 0;
+function scheduleSkyRender() {
+  if (skyRaf) return;
+  skyRaf = requestAnimationFrame(() => {
+    skyRaf = 0;
+    UI.renderSky(state);
+  });
+}
+
+function wireSky() {
+  const canvas = document.getElementById('sky-canvas');
+  if (!canvas) return;
+  const ptrs = new Map(); // pointerId → last {x, y}
+  let lastPinchDist = 0;
+
+  canvas.addEventListener('pointerdown', (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()];
+      lastPinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+    }
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    const prev = ptrs.get(e.pointerId);
+    if (!prev) return;
+    const cur = { x: e.clientX, y: e.clientY };
+    ptrs.set(e.pointerId, cur);
+    if (ptrs.size === 1) {
+      state.sky = dragView(state.sky, cur.x - prev.x, cur.y - prev.y, canvas.clientWidth);
+    } else if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (lastPinchDist > 0) state.sky = zoomView(state.sky, dist / lastPinchDist);
+      lastPinchDist = dist;
+    }
+    scheduleSkyRender();
+  });
+
+  const endPtr = (e) => {
+    ptrs.delete(e.pointerId);
+    lastPinchDist = 0;
+  };
+  canvas.addEventListener('pointerup', endPtr);
+  canvas.addEventListener('pointercancel', endPtr);
+
+  canvas.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      state.sky = zoomView(state.sky, e.deltaY < 0 ? 1.1 : 1 / 1.1);
+      scheduleSkyRender();
+    },
+    { passive: false }
+  );
+
+  let skyResizeTimer = 0;
+  window.addEventListener('resize', () => {
+    clearTimeout(skyResizeTimer);
+    skyResizeTimer = setTimeout(() => {
+      if (route === 'sky') UI.renderSky(state);
+    }, 150);
+  });
+}
+
 function wireMisc() {
   // Tap any hour cell in the Forecast grid → jump Conditions to that
   // exact day + hour.
@@ -901,6 +998,7 @@ function init() {
   wireSavedLocations();
   wireAppearance();
   wireMisc();
+  wireSky();
   boot();
 
   // PWA: offline shell + last-forecast caching. Registration is best-effort

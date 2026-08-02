@@ -49,10 +49,22 @@ function eclToEq(lam, bet, jd) {
 
 /** Altitude (degrees) of a body at (ra, dec) for an observer at lat/lon. */
 export function altitudeOf(ra, dec, jd, lat, lon) {
+  return horizontalOf(ra, dec, jd, lat, lon).alt;
+}
+
+/**
+ * Horizontal coordinates of a body at (ra, dec): altitude plus compass
+ * azimuth (0 = north, 90 = east). Azimuth comes from the standard
+ * meridian-relative form, then is rotated 180° to compass convention.
+ */
+export function horizontalOf(ra, dec, jd, lat, lon) {
   const lst = gmst(jd) + lon; // local sidereal time, east longitude positive
   const ha = norm360(lst - ra); // hour angle
   const alt = Math.asin(sin(lat) * sin(dec) + cos(lat) * cos(dec) * cos(ha)) * RAD;
-  return alt;
+  const az = norm360(
+    Math.atan2(sin(ha), cos(ha) * sin(lat) - Math.tan(dec * DEG) * cos(lat)) * RAD + 180
+  );
+  return { alt, az };
 }
 
 /** Apparent ecliptic longitude of the Sun, degrees (Meeus ch. 25, truncated). */
@@ -259,9 +271,8 @@ function heliocentric(body, T) {
   return { x, y, z };
 }
 
-/** Altitude in degrees of one planet (by table index) at an instant. */
-function planetAltitude(index, date, lat, lon) {
-  const jd = julianDate(date);
+/** Geocentric RA/Dec (degrees) of one planet (by table index) at a JD. */
+function planetEquatorial(index, jd) {
   const T = (jd - 2451545.0) / 36525;
   const earth = heliocentric(EARTH, T);
   const p = heliocentric(PLANETS[index], T);
@@ -270,7 +281,13 @@ function planetAltitude(index, date, lat, lon) {
   const z = p.z - earth.z;
   const lam = Math.atan2(y, x) * RAD;
   const bet = Math.atan2(z, Math.hypot(x, y)) * RAD;
-  const { ra, dec } = eclToEq(lam, bet, jd);
+  return eclToEq(lam, bet, jd);
+}
+
+/** Altitude in degrees of one planet (by table index) at an instant. */
+function planetAltitude(index, date, lat, lon) {
+  const jd = julianDate(date);
+  const { ra, dec } = planetEquatorial(index, jd);
   return altitudeOf(ra, dec, jd, lat, lon);
 }
 
@@ -316,4 +333,35 @@ export function planetNightEvents(startMs, endMs, lat, lon, minAlt = 5) {
     });
   }
   return out.sort((a, b) => b.peakAlt - a.peakAlt);
+}
+
+/**
+ * Positions of the sun, moon, and the five naked-eye planets for the sky
+ * map: { kind, abbr, name, ra, dec, alt, az }, all degrees. The moon gets
+ * the same topocentric parallax correction as moonAltitude().
+ */
+export function skyBodies(date, lat, lon) {
+  const jd = julianDate(date);
+  const out = [];
+
+  const sunEq = eclToEq(sunEclipticLongitude(jd), 0, jd);
+  out.push({ kind: 'sun', abbr: 'Sun', name: 'Sun', ...sunEq, ...horizontalOf(sunEq.ra, sunEq.dec, jd, lat, lon) });
+
+  const { lam, bet } = moonEcliptic(jd);
+  const moonEq = eclToEq(lam, bet, jd);
+  const moonH = horizontalOf(moonEq.ra, moonEq.dec, jd, lat, lon);
+  out.push({
+    kind: 'moon', abbr: 'Moon', name: 'Moon', ...moonEq,
+    az: moonH.az,
+    alt: moonH.alt - 0.952 * cos(moonH.alt),
+  });
+
+  for (let i = 0; i < PLANETS.length; i++) {
+    const eq = planetEquatorial(i, jd);
+    out.push({
+      kind: 'planet', abbr: PLANETS[i].abbr, name: PLANETS[i].name, ...eq,
+      ...horizontalOf(eq.ra, eq.dec, jd, lat, lon),
+    });
+  }
+  return out;
 }
