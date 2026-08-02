@@ -15,6 +15,8 @@ import { fetchLightPollution } from './lightpollution.js';
 import { fetchKpForecast } from './tonight.js';
 import { parseShareCoords, groupByLocalDate, buildICS, nightCloudMean } from './logic.js';
 import { dragView, zoomView } from './skymap.js';
+import { orientationToView, smoothView, headingOffset } from './armath.js';
+import { declination, decimalYear } from './wmm.js';
 import * as UI from './ui.js';
 
 const PREFS_KEY = 'starcast:prefs';
@@ -45,6 +47,7 @@ const state = {
   sky: { az: 180, alt: 25, fov: 70 }, // Sky tab view direction/zoom
   skyData: null, // star/constellation catalog, lazy-fetched on first Sky visit
   skyDataError: false, // true when the last sky.json fetch attempt failed
+  ar: { active: false, camera: false, decl: 0, offset: null, view: null, lastEventAt: 0 },
 };
 
 let route = 'conditions';
@@ -875,6 +878,7 @@ function wireSky() {
     const cur = { x: e.clientX, y: e.clientY };
     ptrs.set(e.pointerId, cur);
     if (ptrs.size === 1) {
+      if (state.ar.active) return;
       state.sky = dragView(state.sky, cur.x - prev.x, cur.y - prev.y, canvas.clientWidth);
     } else if (ptrs.size === 2) {
       const [a, b] = [...ptrs.values()];
@@ -908,6 +912,113 @@ function wireSky() {
     skyResizeTimer = setTimeout(() => {
       if (route === 'sky') UI.renderSky(state);
     }, 150);
+  });
+}
+
+// --- AR mode ---------------------------------------------------------------
+let skyToastTimer = 0;
+function showSkyToast(msg) {
+  const el = document.getElementById('sky-toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  clearTimeout(skyToastTimer);
+  skyToastTimer = setTimeout(() => el.classList.add('hidden'), 3500);
+}
+
+function screenAngle() {
+  return (screen.orientation && Number.isFinite(screen.orientation.angle))
+    ? screen.orientation.angle
+    : (Number(window.orientation) || 0);
+}
+
+let arHasAbsolute = false;
+let arSensorTimer = 0;
+
+function onOrientation(e) {
+  if (!state.ar.active || e.alpha === null || e.alpha === undefined) return;
+  // Prefer absolute events; once one arrives, ignore the relative stream.
+  const isAbsolute = e.type === 'deviceorientationabsolute' || e.absolute === true;
+  if (isAbsolute) arHasAbsolute = true;
+  else if (arHasAbsolute) return;
+
+  let alpha = e.alpha;
+  if (!isAbsolute && typeof e.webkitCompassHeading === 'number' && e.webkitCompassHeading >= 0) {
+    // iOS: fuse the absolute (noisy) compass with the smooth (relative) gyro alpha
+    state.ar.offset = headingOffset(state.ar.offset, e.alpha, e.webkitCompassHeading, 0.05);
+    alpha = e.alpha + state.ar.offset;
+  }
+  state.ar.lastEventAt = Date.now();
+
+  const raw = orientationToView(alpha, e.beta, e.gamma, screenAngle());
+  raw.az = (raw.az + state.ar.decl + 360) % 360; // magnetic → true north
+  state.ar.view = smoothView(state.ar.view, raw, 0.25);
+  state.sky = {
+    az: state.ar.view.az,
+    alt: Math.max(-30, Math.min(89, state.ar.view.alt)),
+    fov: state.sky.fov,
+    roll: state.ar.view.roll,
+  };
+  scheduleSkyRender();
+}
+
+function enterAR() {
+  const finish = () => {
+    state.ar.active = true;
+    state.ar.offset = null;
+    state.ar.view = null;
+    state.ar.lastEventAt = 0;
+    arHasAbsolute = false;
+    state.ar.decl = declination(state.prefs.lat, state.prefs.lon, decimalYear(new Date()));
+    window.addEventListener('deviceorientationabsolute', onOrientation, true);
+    window.addEventListener('deviceorientation', onOrientation, true);
+    clearTimeout(arSensorTimer);
+    arSensorTimer = setTimeout(() => {
+      if (state.ar.active && !state.ar.lastEventAt) {
+        exitAR();
+        showSkyToast('No motion sensors detected');
+      }
+    }, 1500);
+    UI.renderSky(state);
+  };
+  // iOS 13+: must be called synchronously inside the tap gesture
+  if (typeof DeviceOrientationEvent !== 'undefined'
+      && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission()
+      .then((res) => {
+        if (res === 'granted') finish();
+        else showSkyToast('Motion access denied — enable it in Settings › Safari');
+      })
+      .catch(() => showSkyToast('Motion access unavailable'));
+  } else {
+    finish();
+  }
+}
+
+function stopCamera() {} // replaced in camera task
+
+function exitAR() {
+  clearTimeout(arSensorTimer);
+  window.removeEventListener('deviceorientationabsolute', onOrientation, true);
+  window.removeEventListener('deviceorientation', onOrientation, true);
+  stopCamera(); // no-op until Task 4 wires the camera
+  state.ar.active = false;
+  delete state.sky.roll;
+  UI.renderSky(state);
+}
+
+function wireAR() {
+  const btn = document.getElementById('sky-ar-btn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    if (state.ar.active) exitAR();
+    else if (!Number.isFinite(state.prefs.lat)) showSkyToast('Waiting for location…');
+    else enterAR();
+  });
+  // Leaving the tab or backgrounding the app ends AR (sensors + battery)
+  window.addEventListener('hashchange', () => { if (state.ar.active && route !== 'sky') exitAR(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && state.ar.active) exitAR();
   });
 }
 
@@ -999,6 +1110,7 @@ function init() {
   wireAppearance();
   wireMisc();
   wireSky();
+  wireAR();
   boot();
 
   // PWA: offline shell + last-forecast caching. Registration is best-effort

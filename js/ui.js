@@ -1140,6 +1140,14 @@ export function renderSky(state) {
   const jd = julianDate(when);
   const fc = frameContext(jd, lat, lon);
 
+  const roll = state.ar && state.ar.active && Number.isFinite(state.sky.roll) ? state.sky.roll : 0;
+  ctx.save();
+  if (roll) {
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate(roll * Math.PI / 180);
+    ctx.translate(-w / 2, -h / 2);
+  }
+
   // Background keyed to the scrubbed hour's sun altitude (day/twilight/night)
   const sunAlt = hour ? hour.sunAlt : sunAltitude(when, lat, lon);
   const grad = ctx.createLinearGradient(0, 0, 0, h);
@@ -1154,7 +1162,7 @@ export function renderSky(state) {
     grad.addColorStop(1, '#0c1428');
   }
   ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, w, h);
+  ctx.fillRect(-w, -h, 3 * w, 3 * h);
   ctx.font = SKY_FONT;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
@@ -1227,6 +1235,7 @@ export function renderSky(state) {
     ctx.fillText(b.name, p.x, p.y + (b.kind === 'sun' ? 22 : 15));
   }
   ctx.textAlign = 'left';
+  ctx.restore();
 
   // Chrome: loading overlay + caption
   const status = $('sky-status');
@@ -1241,7 +1250,16 @@ export function renderSky(state) {
   const cap = $('sky-caption');
   if (cap) {
     const skyFmt = fmt(state.prefs.tz, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-    cap.textContent = `${skyFmt.format(when)} · facing ${cardinalName(view.az)}`;
+    const arPrefix = state.ar && state.ar.active ? 'AR · ' : '';
+    cap.textContent = `${arPrefix}${skyFmt.format(when)} · facing ${cardinalName(view.az)}`;
+  }
+
+  const arBtn = $('sky-ar-btn');
+  if (arBtn) arBtn.setAttribute('aria-pressed', state.ar && state.ar.active ? 'true' : 'false');
+  const camBtn = $('sky-cam-btn');
+  if (camBtn) {
+    camBtn.classList.toggle('hidden', !(state.ar && state.ar.active));
+    camBtn.setAttribute('aria-pressed', state.ar && state.ar.camera ? 'true' : 'false');
   }
 }
 
