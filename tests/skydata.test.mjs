@@ -25,7 +25,7 @@ test('iconic bright stars are named', () => {
 });
 
 test('constellation polylines cover the sky and are in range', () => {
-  assert.ok(sky.lines.length > 300, `${sky.lines.length} polylines`);
+  assert.ok(sky.lines.length > 120, `${sky.lines.length} polylines`);
   for (const line of sky.lines) {
     assert.ok(line.length >= 2);
     for (const [ra, dec] of line) {

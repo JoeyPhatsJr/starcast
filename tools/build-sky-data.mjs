@@ -8,7 +8,6 @@ import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 
 const HYG_URL = 'https://raw.githubusercontent.com/astronexus/HYG-Database/main/hyg/CURRENT/hygdata_v41.csv';
 const LINES_URL = 'https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/constellations.lines.json';
-const BORDERS_URL = 'https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/constellations.borders.json';
 const MAG_LIMIT = 5.0;
 const NAME_MAG_LIMIT = 1.6;
 const ALWAYS_NAME = new Set(['Polaris']); // dimmer than the cutoff, but iconic
@@ -48,27 +47,15 @@ for (let i = 1; i < rows.length; i++) {
 }
 stars.sort((a, b) => a[2] - b[2]); // brightest first → draw/label priority
 
+const geo = await (await fetch(LINES_URL)).json();
 const lines = [];
-for (const geo of [
-  await (await fetch(LINES_URL)).json(),
-  await (await fetch(BORDERS_URL)).json()
-]) {
-  for (const feat of geo.features) {
-    if (feat.geometry.type === 'MultiLineString') {
-      for (const seg of feat.geometry.coordinates) {
-        lines.push(seg.map(([lon, lat]) => {
-          let ra = +(((lon % 360) + 360) % 360).toFixed(1);
-          if (ra === 360) ra = 0;
-          return [ra, +lat.toFixed(1)];
-        }));
-      }
-    } else if (feat.geometry.type === 'LineString') {
-      lines.push(feat.geometry.coordinates.map(([lon, lat]) => {
-        let ra = +(((lon % 360) + 360) % 360).toFixed(1);
-        if (ra === 360) ra = 0;
-        return [ra, +lat.toFixed(1)];
-      }));
-    }
+for (const feat of geo.features) {
+  for (const seg of feat.geometry.coordinates) {
+    lines.push(seg.map(([lon, lat]) => {
+      let ra = +(((lon % 360) + 360) % 360).toFixed(1);
+      if (ra === 360) ra = 0;
+      return [ra, +lat.toFixed(1)];
+    }));
   }
 }
 
