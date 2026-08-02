@@ -40,7 +40,9 @@ for (let i = 1; i < rows.length; i++) {
   const dec = parseFloat(f[col.dec]);
   if (!Number.isFinite(mag) || mag > MAG_LIMIT) continue;
   if (!Number.isFinite(raHours) || !Number.isFinite(dec)) continue;
-  const star = [+(raHours * 15).toFixed(2), +dec.toFixed(2), +mag.toFixed(1)];
+  let ra = +(raHours * 15).toFixed(2);
+  if (ra === 360) ra = 0; // same wraparound as the constellation-line RA below
+  const star = [ra, +dec.toFixed(2), +mag.toFixed(1)];
   const proper = (f[col.proper] || '').trim();
   if (proper && (mag <= NAME_MAG_LIMIT || ALWAYS_NAME.has(proper))) star.push(proper);
   stars.push(star);

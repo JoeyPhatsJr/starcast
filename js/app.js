@@ -44,6 +44,7 @@ const state = {
   status: 'loading', // loading | ready | error
   sky: { az: 180, alt: 25, fov: 70 }, // Sky tab view direction/zoom
   skyData: null, // star/constellation catalog, lazy-fetched on first Sky visit
+  skyDataError: false, // true when the last sky.json fetch attempt failed
 };
 
 let route = 'conditions';
@@ -381,7 +382,6 @@ function renderData() {
   UI.renderSavedLocations(state);
   if (route === 'charts') UI.renderCharts(state);
   if (route === 'forecast') UI.renderForecast(state);
-  if (route === 'sky') UI.renderSky(state);
 }
 
 /* ================= Fetch orchestration ================= */
@@ -497,6 +497,7 @@ async function refetchAll({ silent = false, first = false } = {}) {
 let skyDataPromise = null;
 function ensureSkyData() {
   if (state.skyData || skyDataPromise) return;
+  state.skyDataError = false;
   skyDataPromise = fetch('./data/sky.json')
     .then((r) => {
       if (!r.ok) throw new Error(`sky.json ${r.status}`);
@@ -504,10 +505,13 @@ function ensureSkyData() {
     })
     .then((data) => {
       state.skyData = data;
+      state.skyDataError = false;
       if (route === 'sky') UI.renderSky(state);
     })
     .catch(() => {
       skyDataPromise = null; // allow retry on next visit to the tab
+      state.skyDataError = true;
+      if (route === 'sky') UI.renderSky(state);
     });
 }
 

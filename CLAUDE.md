@@ -53,7 +53,7 @@ Chart SVGs are the exception: CSS `var()` does not resolve inside SVG presentati
 - localStorage access is always try/catch'd (private-mode Safari throws). Prefs live under the single key `starcast:prefs`.
 - `Number(null) === 0`: never parse optional URL/API params with bare `Number()` — this once relocated the app to 0°N 0°E. `logic.js#parseShareCoords` + its regression test are the pattern.
 
-## Roadmap (agreed with the owner, not yet built)
+## Roadmap (Phase 1 shipped 2026-08-01; Phase 2 not yet built)
 
 **Sky map / AR view — the next big feature.** Plan agreed 2026-08-01:
 

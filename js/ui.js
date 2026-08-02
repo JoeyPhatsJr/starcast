@@ -1118,12 +1118,11 @@ export function applyAppearance(state) {
 const PLANET_COLORS = { Me: '#b8a68a', V: '#efe3bd', Ma: '#e08a5a', J: '#dcc9a8', S: '#d8c07a' };
 const SKY_FONT = '10px -apple-system, "Segoe UI", Roboto, sans-serif';
 
-let skyFmtTz = null;
-let skyFmt = null;
-
 export function renderSky(state) {
   const canvas = $('sky-canvas');
   if (!canvas) return;
+  const { lat, lon } = state.prefs;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
   if (!w || !h) return;
@@ -1137,7 +1136,6 @@ export function renderSky(state) {
 
   const hour = getSelectedHour(state);
   const when = hour ? new Date(hour.time) : new Date();
-  const { lat, lon } = state.prefs;
   const view = state.sky;
   const jd = julianDate(when);
   const fc = frameContext(jd, lat, lon);
@@ -1232,15 +1230,17 @@ export function renderSky(state) {
 
   // Chrome: loading overlay + caption
   const status = $('sky-status');
-  if (status) status.classList.toggle('hidden', !!state.skyData);
+  if (status) {
+    status.classList.toggle('hidden', !!state.skyData);
+    if (!state.skyData) {
+      status.textContent = state.skyDataError
+        ? 'Star catalog unavailable — showing planets and horizon'
+        : 'Loading star catalog…';
+    }
+  }
   const cap = $('sky-caption');
   if (cap) {
-    if (state.prefs.tz !== skyFmtTz) {
-      skyFmtTz = state.prefs.tz;
-      skyFmt = new Intl.DateTimeFormat('en-US', {
-        weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: skyFmtTz || undefined,
-      });
-    }
+    const skyFmt = fmt(state.prefs.tz, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
     cap.textContent = `${skyFmt.format(when)} · facing ${cardinalName(view.az)}`;
   }
 }

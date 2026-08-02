@@ -220,3 +220,12 @@ test('sun is due south at NYC solar noon and east in the morning', () => {
   const amSun = skyBodies(new Date('2026-08-01T10:30:00Z'), NYC.lat, NYC.lon)[0];
   assert.ok(amSun.az > 50 && amSun.az < 110, `morning az ${amSun.az}`);
 });
+
+test('sun is due north at Sydney solar noon in southern winter', () => {
+  // Southern hemisphere: the sun tracks through the north at midday, not
+  // the south — az should sit near 0/360, not 180.
+  const SYDNEY = { lat: -33.87, lon: 151.21 };
+  const noonSun = skyBodies(new Date('2026-06-21T02:00:00Z'), SYDNEY.lat, SYDNEY.lon)[0];
+  const distFrom0 = Math.min(noonSun.az, 360 - noonSun.az);
+  assert.ok(distFrom0 < 15, `noon az ${noonSun.az}`);
+});

@@ -62,6 +62,8 @@ test('draw lists cull and produce sane runs', () => {
   const stars = [[279.23, 38.78, 0.0, 'Vega'], [101.29, -16.72, -1.4, 'Sirius']];
   const list = starDrawList(stars, fc, { az: 90, alt: 60, fov: 100 }, 400, 300);
   assert.ok(list.length >= 1); // Vega is high in the NYC summer sky
+  // Sirius is ~63° below the horizon at this NYC epoch — must be culled.
+  assert.ok(!list.some((s) => s.name === 'Sirius'), 'Sirius should be culled below-horizon');
   for (const s of list) assert.ok(Number.isFinite(s.x) && s.r > 0);
   const runs = lineDrawList([[[279, 38], [285, 40], [290, 35]]], fc, { az: 90, alt: 60, fov: 100 }, 400, 300);
   for (const run of runs) assert.ok(run.length >= 2);

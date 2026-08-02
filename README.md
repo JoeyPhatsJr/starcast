@@ -86,6 +86,8 @@ timeline, day tabs for the full 14-day forecast, and 72-hour charts.
   (CC BY-SA 4.0); baked into `data/sky.json` via `node tools/build-sky-data.mjs`.
 - **[d3-celestial](https://github.com/ofrohn/d3-celestial)** — constellation line
   figures for the Sky map (BSD-3-Clause).
+- `data/sky.json` is itself a derivative work of the HYG Database and is
+  therefore also licensed CC BY-SA 4.0.
 
 ## Tests & CI
 
