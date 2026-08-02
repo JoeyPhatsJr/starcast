@@ -995,13 +995,46 @@ function enterAR() {
   }
 }
 
-function stopCamera() {} // replaced in camera task
+let camStream = null;
+function stopCamera() {
+  if (camStream) {
+    for (const t of camStream.getTracks()) t.stop();
+    camStream = null;
+  }
+  const video = document.getElementById('sky-camera');
+  if (video) {
+    video.srcObject = null;
+    video.classList.add('hidden');
+  }
+  state.ar.camera = false;
+}
+
+async function startCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showSkyToast('Camera not available');
+    return;
+  }
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' },
+      audio: false,
+    });
+    const video = document.getElementById('sky-camera');
+    video.srcObject = camStream;
+    video.classList.remove('hidden');
+    state.ar.camera = true;
+  } catch {
+    showSkyToast('Camera unavailable or permission denied');
+    state.ar.camera = false;
+  }
+  UI.renderSky(state);
+}
 
 function exitAR() {
   clearTimeout(arSensorTimer);
   window.removeEventListener('deviceorientationabsolute', onOrientation, true);
   window.removeEventListener('deviceorientation', onOrientation, true);
-  stopCamera(); // no-op until Task 4 wires the camera
+  stopCamera();
   state.ar.active = false;
   delete state.sky.roll;
   UI.renderSky(state);
@@ -1014,6 +1047,12 @@ function wireAR() {
     if (state.ar.active) exitAR();
     else if (!Number.isFinite(state.prefs.lat)) showSkyToast('Waiting for location…');
     else enterAR();
+  });
+  document.getElementById('sky-cam-btn')?.addEventListener('click', () => {
+    if (state.ar.camera) {
+      stopCamera();
+      UI.renderSky(state);
+    } else startCamera();
   });
   // Leaving the tab or backgrounding the app ends AR (sensors + battery)
   window.addEventListener('hashchange', () => { if (state.ar.active && route !== 'sky') exitAR(); });

@@ -1149,20 +1149,28 @@ export function renderSky(state) {
   }
 
   // Background keyed to the scrubbed hour's sun altitude (day/twilight/night)
-  const sunAlt = hour ? hour.sunAlt : sunAltitude(when, lat, lon);
-  const grad = ctx.createLinearGradient(0, 0, 0, h);
-  if (sunAlt > 0) {
-    grad.addColorStop(0, '#33517e');
-    grad.addColorStop(1, '#4a648c');
-  } else if (sunAlt > -12) {
-    grad.addColorStop(0, '#0b1330');
-    grad.addColorStop(1, '#2b3152');
+  // — unless the camera feed is showing through, in which case a translucent
+  // scrim replaces the opaque gradient so stars overlay live video.
+  if (state.ar && state.ar.camera) {
+    ctx.clearRect(-w, -h, 3 * w, 3 * h);
+    ctx.fillStyle = 'rgba(2, 4, 10, 0.35)';
+    ctx.fillRect(-w, -h, 3 * w, 3 * h);
   } else {
-    grad.addColorStop(0, '#04070f');
-    grad.addColorStop(1, '#0c1428');
+    const sunAlt = hour ? hour.sunAlt : sunAltitude(when, lat, lon);
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    if (sunAlt > 0) {
+      grad.addColorStop(0, '#33517e');
+      grad.addColorStop(1, '#4a648c');
+    } else if (sunAlt > -12) {
+      grad.addColorStop(0, '#0b1330');
+      grad.addColorStop(1, '#2b3152');
+    } else {
+      grad.addColorStop(0, '#04070f');
+      grad.addColorStop(1, '#0c1428');
+    }
+    ctx.fillStyle = grad;
+    ctx.fillRect(-w, -h, 3 * w, 3 * h);
   }
-  ctx.fillStyle = grad;
-  ctx.fillRect(-w, -h, 3 * w, 3 * h);
   ctx.font = SKY_FONT;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
