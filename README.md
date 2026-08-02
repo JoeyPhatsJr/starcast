@@ -82,7 +82,10 @@ timeline, day tabs for the full 14-day forecast, and 72-hour charts.
   the aurora outlook.
 - **[BigDataCloud](https://www.bigdatacloud.com/)** — free reverse geocoding,
   used only to put a real place name on your GPS position.
-- Stars: [HYG Database](https://www.astronexus.com/hyg) (CC BY-SA 4.0) · Constellation lines: [d3-celestial](https://github.com/ofrohn/d3-celestial) (BSD-3-Clause) — baked into `data/sky.json` via `node tools/build-sky-data.mjs`
+- **[HYG Database](https://www.astronexus.com/hyg)** — star catalog for the Sky map
+  (CC BY-SA 4.0); baked into `data/sky.json` via `node tools/build-sky-data.mjs`.
+- **[d3-celestial](https://github.com/ofrohn/d3-celestial)** — constellation line
+  figures for the Sky map (BSD-3-Clause).
 
 ## Tests & CI
 
