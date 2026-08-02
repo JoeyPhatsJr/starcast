@@ -7,8 +7,11 @@
 
 import { scoreMetric, verdict, band, WEIGHTS } from './score.js';
 import { activeShowers, milkyWayPeak, phaseName, kpNeeded } from './tonight.js';
-import { planetNightEvents } from './astro.js';
+import { planetNightEvents, julianDate, sunAltitude, skyBodies } from './astro.js';
 import { nightHoursOf, bestWindowIn, dewRiskStart } from './logic.js';
+import {
+  project, frameContext, starDrawList, lineDrawList, horizonDrawList, cardinalName, CARDINALS,
+} from './skymap.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -1106,6 +1109,140 @@ export function applyAppearance(state) {
   tn.setAttribute('aria-checked', String(!!state.prefs.night));
   tc.classList.toggle('on', !!state.prefs.cb);
   tc.setAttribute('aria-checked', String(!!state.prefs.cb));
+}
+
+/* ================= Sky map ================= */
+// Canvas colors are hardcoded hex on purpose (canvas can't read CSS vars —
+// same rule as the SVG charts). Night mode reddens the whole canvas via the
+// body.night filter, so no red-mode handling is needed here.
+const PLANET_COLORS = { Me: '#b8a68a', V: '#efe3bd', Ma: '#e08a5a', J: '#dcc9a8', S: '#d8c07a' };
+const SKY_FONT = '10px -apple-system, "Segoe UI", Roboto, sans-serif';
+
+let skyFmtTz = null;
+let skyFmt = null;
+
+export function renderSky(state) {
+  const canvas = $('sky-canvas');
+  if (!canvas) return;
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  if (!w || !h) return;
+  const dpr = window.devicePixelRatio || 1;
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const hour = getSelectedHour(state);
+  const when = hour ? new Date(hour.time) : new Date();
+  const { lat, lon } = state.prefs;
+  const view = state.sky;
+  const jd = julianDate(when);
+  const fc = frameContext(jd, lat, lon);
+
+  // Background keyed to the scrubbed hour's sun altitude (day/twilight/night)
+  const sunAlt = hour ? hour.sunAlt : sunAltitude(when, lat, lon);
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  if (sunAlt > 0) {
+    grad.addColorStop(0, '#33517e');
+    grad.addColorStop(1, '#4a648c');
+  } else if (sunAlt > -12) {
+    grad.addColorStop(0, '#0b1330');
+    grad.addColorStop(1, '#2b3152');
+  } else {
+    grad.addColorStop(0, '#04070f');
+    grad.addColorStop(1, '#0c1428');
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+  ctx.font = SKY_FONT;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+
+  if (state.skyData) {
+    ctx.strokeStyle = 'rgba(130,160,210,0.30)';
+    ctx.lineWidth = 1;
+    for (const run of lineDrawList(state.skyData.lines, fc, view, w, h)) {
+      ctx.beginPath();
+      run.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#f2f5fa';
+    for (const s of starDrawList(state.skyData.stars, fc, view, w, h)) {
+      ctx.globalAlpha = Math.min(1, 0.35 + s.r * 0.28);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+      if (s.name) {
+        ctx.globalAlpha = 0.7;
+        ctx.fillText(s.name, s.x + s.r + 3, s.y);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Horizon line + cardinal labels
+  ctx.strokeStyle = 'rgba(160,190,230,0.55)';
+  ctx.lineWidth = 1.5;
+  for (const run of horizonDrawList(view, w, h)) {
+    ctx.beginPath();
+    run.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(190,210,240,0.85)';
+  ctx.textAlign = 'center';
+  for (const [label, az] of CARDINALS) {
+    const p = project(az, 0, view, w, h);
+    if (p && p.x > -20 && p.x < w + 20 && p.y > -10 && p.y < h + 20) {
+      ctx.fillText(label, p.x, Math.min(h - 8, p.y + 12));
+    }
+  }
+
+  // Sun, moon, planets
+  for (const b of skyBodies(when, lat, lon)) {
+    if (b.alt < -0.5) continue;
+    const p = project(b.az, b.alt, view, w, h);
+    if (!p) continue;
+    if (b.kind === 'sun') {
+      ctx.fillStyle = 'rgba(255,217,138,0.25)';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 16, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffd98a';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (b.kind === 'moon') {
+      ctx.fillStyle = '#e8ecf4';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = PLANET_COLORS[b.abbr] || '#f2f5fa';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(220,230,245,0.85)';
+    ctx.fillText(b.name, p.x, p.y + (b.kind === 'sun' ? 22 : 15));
+  }
+  ctx.textAlign = 'left';
+
+  // Chrome: loading overlay + caption
+  const status = $('sky-status');
+  if (status) status.classList.toggle('hidden', !!state.skyData);
+  const cap = $('sky-caption');
+  if (cap) {
+    if (state.prefs.tz !== skyFmtTz) {
+      skyFmtTz = state.prefs.tz;
+      skyFmt = new Intl.DateTimeFormat('en-US', {
+        weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: skyFmtTz || undefined,
+      });
+    }
+    cap.textContent = `${skyFmt.format(when)} · facing ${cardinalName(view.az)}`;
+  }
 }
 
 /* ================= Shell state ================= */

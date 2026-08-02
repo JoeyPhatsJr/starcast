@@ -41,6 +41,8 @@ const state = {
   lastFetch: null, // epoch ms of the last non-cached Open-Meteo success
   offlineData: false, // true when showing the SW's cached fallback
   status: 'loading', // loading | ready | error
+  sky: { az: 180, alt: 25, fov: 70 }, // Sky tab view direction/zoom
+  skyData: null, // star/constellation catalog, lazy-fetched on first Sky visit
 };
 
 let route = 'conditions';
@@ -360,6 +362,7 @@ function renderSelection() {
   UI.renderBanner(state);
   UI.renderTiles(state);
   UI.updatePlayhead(state);
+  if (route === 'sky') UI.renderSky(state);
 }
 
 function renderSelectionExtras() {
@@ -377,6 +380,7 @@ function renderData() {
   UI.renderSavedLocations(state);
   if (route === 'charts') UI.renderCharts(state);
   if (route === 'forecast') UI.renderForecast(state);
+  if (route === 'sky') UI.renderSky(state);
 }
 
 /* ================= Fetch orchestration ================= */
@@ -487,9 +491,28 @@ async function refetchAll({ silent = false, first = false } = {}) {
   // Silent refresh failure: keep showing the data we already have.
 }
 
+/* ================= Sky map catalog (lazy, fire-and-forget) ================= */
+
+let skyDataPromise = null;
+function ensureSkyData() {
+  if (state.skyData || skyDataPromise) return;
+  skyDataPromise = fetch('./data/sky.json')
+    .then((r) => {
+      if (!r.ok) throw new Error(`sky.json ${r.status}`);
+      return r.json();
+    })
+    .then((data) => {
+      state.skyData = data;
+      if (route === 'sky') UI.renderSky(state);
+    })
+    .catch(() => {
+      skyDataPromise = null; // allow retry on next visit to the tab
+    });
+}
+
 /* ================= Routing ================= */
 
-const ROUTES = { '': 'conditions', '#/': 'conditions', '#/forecast': 'forecast', '#/charts': 'charts', '#/settings': 'settings', '#/help': 'help' };
+const ROUTES = { '': 'conditions', '#/': 'conditions', '#/sky': 'sky', '#/forecast': 'forecast', '#/charts': 'charts', '#/settings': 'settings', '#/help': 'help' };
 
 function applyRoute() {
   route = ROUTES[location.hash] || 'conditions';
@@ -500,6 +523,9 @@ function applyRoute() {
     // Re-center the active day tab — centering math needs a visible scroller.
     if (route === 'conditions') UI.renderDayTabs(state);
   }
+  // Sky renders bodies + horizon from the system clock even before/without
+  // forecast data, so it doesn't gate on state.status.
+  if (route === 'sky') { ensureSkyData(); UI.renderSky(state); }
 }
 
 /* ================= Interactions ================= */
