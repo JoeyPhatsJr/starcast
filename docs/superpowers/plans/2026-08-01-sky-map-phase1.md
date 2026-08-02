@@ -24,7 +24,7 @@
 ## Locked design decisions (owner-ratified 2026-08-01)
 
 - Sky is a **6th nav tab**, placed right after Conditions.
-- **All 88** constellation figures, from d3-celestial line data (BSD-3, coordinates are raw RA/Dec — no star-ID matching).
+- **All 88** constellation figures, from d3-celestial line data (BSD-3, coordinates are raw RA/Dec — no star-ID matching). Figures ONLY — constellation *borders* (constellations.borders.json) are explicitly out of scope (owner ruling 2026-08-01).
 - Labels: sun/moon/planets always; star names only for mag ≤ 1.6 **plus Polaris** (~20 names, stored in the catalog file).
 - Drag + **pinch zoom** (and desktop scroll-wheel), FOV clamped 30°–100° (gnomonic projection degrades beyond that).
 - Time source: the scrubbed hour (`getSelectedHour(state).time`, epoch ms). Scrubbing on the Conditions tab and returning to Sky shows that hour; falls back to `new Date()` if no data yet.
@@ -277,7 +277,7 @@ test('iconic bright stars are named', () => {
 });
 
 test('constellation polylines cover the sky and are in range', () => {
-  assert.ok(sky.lines.length > 300, `${sky.lines.length} polylines`);
+  assert.ok(sky.lines.length > 120, `${sky.lines.length} polylines`); // lines file yields ~150 (owner ruling 2026-08-01: figures only, no borders)
   for (const line of sky.lines) {
     assert.ok(line.length >= 2);
     for (const [ra, dec] of line) {
