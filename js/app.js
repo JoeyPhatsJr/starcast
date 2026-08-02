@@ -996,6 +996,7 @@ function enterAR() {
 }
 
 let camStream = null;
+let camStarting = false; // re-entrancy guard: blocks a second getUserMedia while one is in flight
 function stopCamera() {
   if (camStream) {
     for (const t of camStream.getTracks()) t.stop();
@@ -1010,15 +1011,24 @@ function stopCamera() {
 }
 
 async function startCamera() {
+  if (camStarting || camStream) return; // already starting or already streaming
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     showSkyToast('Camera not available');
     return;
   }
+  camStarting = true;
   try {
-    camStream = await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment' },
       audio: false,
     });
+    // The user may have exited AR (or another cycle already attached a
+    // stream) while this request was in flight — don't adopt an orphan.
+    if (!state.ar.active || camStream) {
+      for (const t of stream.getTracks()) t.stop();
+      return;
+    }
+    camStream = stream;
     const video = document.getElementById('sky-camera');
     video.srcObject = camStream;
     video.classList.remove('hidden');
@@ -1026,8 +1036,10 @@ async function startCamera() {
   } catch {
     showSkyToast('Camera unavailable or permission denied');
     state.ar.camera = false;
+  } finally {
+    camStarting = false;
+    UI.renderSky(state);
   }
-  UI.renderSky(state);
 }
 
 function exitAR() {
