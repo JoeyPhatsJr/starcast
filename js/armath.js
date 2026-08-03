@@ -25,7 +25,16 @@ export function wrap180(d) {
   return d > 180 ? d - 360 : d;
 }
 
-export function orientationToView(alpha, beta, gamma, screenAngle = 0) {
+/**
+ * Full orientation as a view BASIS: f = back-camera direction, u = screen-up,
+ * both unit vectors in the earth frame and mutually orthogonal. This is the
+ * singularity-free representation — smooth THIS (smoothBasis), correct
+ * heading on THIS (rotateBasisZ), and only decompose to {az, alt, roll} at
+ * the last moment (basisToView). Decomposed angles individually blow up near
+ * the zenith; the basis never does (2026-08-03 field bug: "jumping in
+ * circles looking straight up").
+ */
+export function orientationToBasis(alpha, beta, gamma, screenAngle = 0) {
   const cA = Math.cos(alpha * DEG);
   const sA = Math.sin(alpha * DEG);
   const cB = Math.cos(beta * DEG);
@@ -41,31 +50,71 @@ export function orientationToView(alpha, beta, gamma, screenAngle = 0) {
   // Screen axes = device axes rotated by screenAngle about device z
   const cS = Math.cos(screenAngle * DEG);
   const sS = Math.sin(screenAngle * DEG);
-  const ys = [
-    -R[0][0] * sS + R[0][1] * cS,
-    -R[1][0] * sS + R[1][1] * cS,
-    -R[2][0] * sS + R[2][1] * cS,
-  ]; // screen-up in earth frame
-  const v = [-R[0][2], -R[1][2], -R[2][2]]; // back-camera direction
+  return {
+    f: [-R[0][2], -R[1][2], -R[2][2]], // back-camera direction
+    u: [
+      -R[0][0] * sS + R[0][1] * cS,
+      -R[1][0] * sS + R[1][1] * cS,
+      -R[2][0] * sS + R[2][1] * cS,
+    ], // screen-up in earth frame
+  };
+}
 
-  const az = wrap360(Math.atan2(v[0], v[1]) * RAD);
-  const alt = Math.asin(Math.max(-1, Math.min(1, v[2]))) * RAD;
+/** Shift a basis's azimuth by `deg` (heading corrections: declination and
+ * compass fusion are both rotations about the world's vertical axis). */
+export function rotateBasisZ(basis, deg) {
+  const c = Math.cos(deg * DEG);
+  const s = Math.sin(deg * DEG);
+  const rot = (v) => [v[0] * c + v[1] * s, v[1] * c - v[0] * s, v[2]];
+  return { f: rot(basis.f), u: rot(basis.u) };
+}
 
-  // roll: screen-up vs "up in view", around the view axis.
-  // right = v × worldUp = (v.y, −v.x, 0); upInView = right × v.
-  let rx = v[1];
-  let ry = -v[0];
-  const rl = Math.hypot(rx, ry);
-  let roll = 0;
-  if (rl > 1e-9) {
-    rx /= rl;
-    ry /= rl;
-    const ux = ry * v[2];
-    const uy = -rx * v[2];
-    const uz = rx * v[1] - ry * v[0];
-    roll = Math.atan2(ys[0] * rx + ys[1] * ry, ys[0] * ux + ys[1] * uy + ys[2] * uz) * RAD;
+/** Exponential low-pass on a basis: lerp both vectors, then re-orthonormalize
+ * (Gram-Schmidt). Smoothing the rigid frame keeps az and roll mutually
+ * consistent through the zenith, where smoothing them separately spins. */
+export function smoothBasis(prev, next, k) {
+  if (!prev) return next;
+  const mix = (a, b) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+  let f = mix(prev.f, next.f);
+  const fn = Math.hypot(f[0], f[1], f[2]) || 1;
+  f = [f[0] / fn, f[1] / fn, f[2] / fn];
+  let u = mix(prev.u, next.u);
+  const d = u[0] * f[0] + u[1] * f[1] + u[2] * f[2];
+  u = [u[0] - d * f[0], u[1] - d * f[1], u[2] - d * f[2]];
+  const un = Math.hypot(u[0], u[1], u[2]) || 1;
+  u = [u[0] / un, u[1] / un, u[2] / un];
+  return { f, u };
+}
+
+/**
+ * Decompose a basis into {az, alt, roll} for the renderer — atomically, so
+ * az and roll always describe the SAME frame (their rapid compensating
+ * swings near the zenith cancel in the rendered picture). At the exact
+ * zenith/nadir the view direction carries no azimuth, so it is taken from
+ * where screen-up points instead, with roll 0 — continuous with the
+ * near-pole decomposition on either side.
+ */
+export function basisToView(basis) {
+  const [fe, fN, fu] = basis.f;
+  const [ue, uN, uu] = basis.u;
+  const alt = Math.asin(Math.max(-1, Math.min(1, fu))) * RAD;
+  const h = Math.hypot(fe, fN);
+  if (h < 1e-9) {
+    return { az: wrap360(Math.atan2(ue, uN) * RAD), alt, roll: 0 };
   }
+  const az = wrap360(Math.atan2(fe, fN) * RAD);
+  // right = f × worldUp (normalized); upInView = right × f
+  const rx = fN / h;
+  const ry = -fe / h;
+  const ux = ry * fu;
+  const uy = -rx * fu;
+  const uz = rx * fN - ry * fe;
+  const roll = Math.atan2(ue * rx + uN * ry, ue * ux + uN * uy + uu * uz) * RAD;
   return { az, alt, roll };
+}
+
+export function orientationToView(alpha, beta, gamma, screenAngle = 0) {
+  return basisToView(orientationToBasis(alpha, beta, gamma, screenAngle));
 }
 
 /** Exponential low-pass on a view. Blends the direction as a 3-vector so the
