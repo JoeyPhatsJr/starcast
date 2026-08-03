@@ -1144,7 +1144,10 @@ export function renderSky(state) {
   ctx.save();
   if (roll) {
     ctx.translate(w / 2, h / 2);
-    ctx.rotate(roll * Math.PI / 180);
+    // Counter-rotate: the phone rolling clockwise makes the world appear
+    // counter-clockwise through the screen. Sign field-verified 2026-08-03
+    // (positive roll here made the horizon follow the phone).
+    ctx.rotate(-roll * Math.PI / 180);
     ctx.translate(-w / 2, -h / 2);
   }
 

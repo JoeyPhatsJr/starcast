@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {
   parseShareCoords, groupByLocalDate, nightHoursOf,
   bestRun, bestWindowIn, buildICS, icsEscape, nightCloudMean, dewRiskStart,
+  shouldAutoEnterAR,
 } from '../js/logic.js';
 
 /* ================= Share-param parsing ================= */
@@ -168,4 +169,17 @@ test('nightCloudMean: averages only night hours in the next 14h', () => {
   const isNight = (t) => t !== now + 2 * H;
   assert.equal(nightCloudMean(cloudHours, now, isNight), 30); // (10+50)/2
   assert.equal(nightCloudMean(cloudHours, now, () => false), null);
+});
+
+/* ================= AR auto-entry ================= */
+
+test('shouldAutoEnterAR: defaults on, each gate can veto', () => {
+  const ok = { arAuto: undefined, arActive: false, latFinite: true, hasSensorApi: true, coarsePointer: true };
+  assert.equal(shouldAutoEnterAR(ok), true); // absent pref = on (existing users)
+  assert.equal(shouldAutoEnterAR({ ...ok, arAuto: true }), true);
+  assert.equal(shouldAutoEnterAR({ ...ok, arAuto: false }), false); // user turned it off
+  assert.equal(shouldAutoEnterAR({ ...ok, arActive: true }), false); // already in AR
+  assert.equal(shouldAutoEnterAR({ ...ok, latFinite: false }), false); // no location yet
+  assert.equal(shouldAutoEnterAR({ ...ok, hasSensorApi: false }), false);
+  assert.equal(shouldAutoEnterAR({ ...ok, coarsePointer: false }), false); // desktop
 });

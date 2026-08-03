@@ -134,3 +134,19 @@ export function nightCloudMean(cloudHours, fromMs, isNight) {
   if (!night.length) return null;
   return night.reduce((a, h) => a + h.cloud, 0) / night.length;
 }
+
+/**
+ * Whether the Sky tab should enter AR tracking on its own (no tap). Default
+ * is ON — `arAuto` only vetoes when the user explicitly toggled AR off (we
+ * persist false at that moment). The other gates keep auto-entry silent and
+ * sane: never re-enter over an active session, never before the location is
+ * known (declination needs it), never without a sensor API, and never on
+ * fine-pointer (desktop) devices where the no-sensor toast would just nag.
+ */
+export function shouldAutoEnterAR(ctx) {
+  return ctx.arAuto !== false
+    && !ctx.arActive
+    && ctx.latFinite === true
+    && ctx.hasSensorApi === true
+    && ctx.coarsePointer === true;
+}
