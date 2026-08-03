@@ -15,7 +15,7 @@ import { fetchLightPollution } from './lightpollution.js';
 import { fetchKpForecast } from './tonight.js';
 import { parseShareCoords, groupByLocalDate, buildICS, nightCloudMean, shouldAutoEnterAR } from './logic.js';
 import { dragView, zoomView } from './skymap.js';
-import { orientationToView, smoothView, headingOffset } from './armath.js';
+import { orientationToBasis, rotateBasisZ, smoothBasis, basisToView, headingOffset } from './armath.js';
 import { declination, decimalYear } from './wmm.js';
 import * as UI from './ui.js';
 
@@ -48,7 +48,7 @@ const state = {
   sky: { az: 180, alt: 25, fov: 70 }, // Sky tab view direction/zoom
   skyData: null, // star/constellation catalog, lazy-fetched on first Sky visit
   skyDataError: false, // true when the last sky.json fetch attempt failed
-  ar: { active: false, camera: false, decl: 0, offset: null, view: null, lastEventAt: 0 },
+  ar: { active: false, camera: false, decl: 0, offset: null, basis: null, lastEventAt: 0 },
 };
 
 let route = 'conditions';
@@ -943,22 +943,30 @@ function onOrientation(e) {
   if (isAbsolute) arHasAbsolute = true;
   else if (arHasAbsolute) return;
 
-  let alpha = e.alpha;
-  if (!isAbsolute && typeof e.webkitCompassHeading === 'number' && e.webkitCompassHeading >= 0) {
-    // iOS: fuse the absolute (noisy) compass with the smooth (relative) gyro alpha
-    state.ar.offset = headingOffset(state.ar.offset, e.alpha, e.webkitCompassHeading, 0.05);
-    alpha = e.alpha + state.ar.offset;
-  }
   state.ar.lastEventAt = Date.now();
 
-  const raw = orientationToView(alpha, e.beta, e.gamma, screenAngle());
-  raw.az = (raw.az + state.ar.decl + 360) % 360; // magnetic → true north
-  state.ar.view = smoothView(state.ar.view, raw, 0.25);
+  const raw = orientationToBasis(e.alpha, e.beta, e.gamma, screenAngle());
+  let headingFix = state.ar.decl; // magnetic → true north
+  if (!isAbsolute && typeof e.webkitCompassHeading === 'number' && e.webkitCompassHeading >= 0) {
+    // iOS: fuse the absolute (noisy) compass with the smooth (relative) gyro
+    // alpha — but compass headings are garbage when the phone points near the
+    // zenith, so freeze the fused offset there and coast on the gyro.
+    // f[2] = sin(view altitude); 0.87 ≈ alt 60°.
+    if (raw.f[2] < 0.87) {
+      state.ar.offset = headingOffset(state.ar.offset, e.alpha, e.webkitCompassHeading, 0.05);
+    }
+    if (state.ar.offset !== null) headingFix -= state.ar.offset; // alpha+offset ≡ az−offset
+  }
+  // Smooth the rigid basis, not az/alt/roll separately — the decomposed
+  // angles spin wildly (but in compensating ways) near the zenith, and
+  // independent smoothing breaks the compensation (field bug 2026-08-03).
+  state.ar.basis = smoothBasis(state.ar.basis, rotateBasisZ(raw, headingFix), 0.25);
+  const v = basisToView(state.ar.basis);
   state.sky = {
-    az: state.ar.view.az,
-    alt: Math.max(-30, Math.min(89, state.ar.view.alt)),
+    az: v.az,
+    alt: Math.max(-30, Math.min(90, v.alt)),
     fov: state.sky.fov,
-    roll: state.ar.view.roll,
+    roll: v.roll,
   };
   scheduleSkyRender();
 }
@@ -967,7 +975,7 @@ function enterAR(auto = false) {
   const finish = () => {
     state.ar.active = true;
     state.ar.offset = null;
-    state.ar.view = null;
+    state.ar.basis = null;
     state.ar.lastEventAt = 0;
     arHasAbsolute = false;
     state.ar.decl = declination(state.prefs.lat, state.prefs.lon, decimalYear(new Date()));
