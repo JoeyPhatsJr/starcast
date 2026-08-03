@@ -13,7 +13,7 @@ import {
 import { overallScore } from './score.js';
 import { fetchLightPollution } from './lightpollution.js';
 import { fetchKpForecast } from './tonight.js';
-import { parseShareCoords, groupByLocalDate, buildICS, nightCloudMean } from './logic.js';
+import { parseShareCoords, groupByLocalDate, buildICS, nightCloudMean, shouldAutoEnterAR } from './logic.js';
 import { dragView, zoomView } from './skymap.js';
 import { orientationToView, smoothView, headingOffset } from './armath.js';
 import { declination, decimalYear } from './wmm.js';
@@ -28,6 +28,7 @@ const state = {
     lat: null, lon: null, name: '', tz: 'America/New_York',
     bortle: 5, units: 'imperial', // bortle is always the atlas-measured value
     saved: [], night: false, cb: false,
+    arAuto: true, // Sky tab enters AR tracking on its own; false after a manual AR-off
   },
   hours: [],
   days: [],
@@ -84,8 +85,8 @@ function loadPrefs() {
 function savePrefs() {
   try {
     // bortle persists so an offline start reuses the last measured value.
-    const { lat, lon, name, tz, bortle, units, saved, night, cb } = state.prefs;
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ lat, lon, name, tz, bortle, units, saved, night, cb }));
+    const { lat, lon, name, tz, bortle, units, saved, night, cb, arAuto } = state.prefs;
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ lat, lon, name, tz, bortle, units, saved, night, cb, arAuto }));
   } catch (e) { /* private mode — prefs just won't persist */ }
 }
 
@@ -367,7 +368,7 @@ function renderSelection() {
   UI.renderBanner(state);
   UI.renderTiles(state);
   UI.updatePlayhead(state);
-  if (route === 'sky') UI.renderSky(state);
+  if (route === 'sky') { UI.renderSky(state); maybeAutoEnterAR(); }
 }
 
 function renderSelectionExtras() {
@@ -533,7 +534,7 @@ function applyRoute() {
   }
   // Sky renders bodies + horizon from the system clock even before/without
   // forecast data, so it doesn't gate on state.status.
-  if (route === 'sky') { ensureSkyData(); UI.renderSky(state); }
+  if (route === 'sky') { ensureSkyData(); UI.renderSky(state); maybeAutoEnterAR(); }
 }
 
 /* ================= Interactions ================= */
@@ -962,7 +963,7 @@ function onOrientation(e) {
   scheduleSkyRender();
 }
 
-function enterAR() {
+function enterAR(auto = false) {
   const finish = () => {
     state.ar.active = true;
     state.ar.offset = null;
@@ -976,23 +977,43 @@ function enterAR() {
     arSensorTimer = setTimeout(() => {
       if (state.ar.active && !state.ar.lastEventAt) {
         exitAR();
-        showSkyToast('No motion sensors detected');
+        if (!auto) showSkyToast('No motion sensors detected');
       }
     }, 1500);
     UI.renderSky(state);
   };
-  // iOS 13+: must be called synchronously inside the tap gesture
+  // iOS 13+: must be called synchronously inside the tap gesture. An AUTO
+  // entry has no gesture, so on iOS it only succeeds when permission was
+  // already granted — every failure path stays silent (the AR button is the
+  // gestured fallback).
   if (typeof DeviceOrientationEvent !== 'undefined'
       && typeof DeviceOrientationEvent.requestPermission === 'function') {
     DeviceOrientationEvent.requestPermission()
       .then((res) => {
         if (res === 'granted') finish();
-        else showSkyToast('Motion access denied — enable it in Settings › Safari');
+        else if (!auto) showSkyToast('Motion access denied — enable it in Settings › Safari');
       })
-      .catch(() => showSkyToast('Motion access unavailable'));
+      .catch(() => { if (!auto) showSkyToast('Motion access unavailable'); });
   } else {
     finish();
   }
+}
+
+// One auto-attempt per page load: a failed silent attempt (iOS permission
+// needs a gesture, or no sensors) won't help by repeating. Not marked while
+// the location is still unknown, so the attempt fires once data arrives.
+let arAutoTried = false;
+function maybeAutoEnterAR() {
+  if (!shouldAutoEnterAR({
+    arAuto: state.prefs.arAuto,
+    arActive: state.ar.active,
+    latFinite: Number.isFinite(state.prefs.lat),
+    hasSensorApi: typeof DeviceOrientationEvent !== 'undefined',
+    coarsePointer: !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches),
+  })) return;
+  if (arAutoTried) return;
+  arAutoTried = true;
+  enterAR(true);
 }
 
 let camStream = null;
@@ -1056,9 +1077,19 @@ function wireAR() {
   const btn = document.getElementById('sky-ar-btn');
   if (!btn) return;
   btn.addEventListener('click', () => {
-    if (state.ar.active) exitAR();
-    else if (!Number.isFinite(state.prefs.lat)) showSkyToast('Waiting for location…');
-    else enterAR();
+    if (state.ar.active) {
+      // A deliberate AR-off also turns off auto-entry until they opt back in
+      state.prefs.arAuto = false;
+      savePrefs();
+      exitAR();
+    } else if (!Number.isFinite(state.prefs.lat)) {
+      showSkyToast('Waiting for location…');
+    } else {
+      state.prefs.arAuto = true;
+      savePrefs();
+      arAutoTried = true; // the gesture entry supersedes any pending auto-attempt
+      enterAR();
+    }
   });
   document.getElementById('sky-cam-btn')?.addEventListener('click', () => {
     if (state.ar.camera) {
