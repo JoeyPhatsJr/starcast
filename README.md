@@ -48,6 +48,9 @@ timeline, day tabs for the full 14-day forecast, and 72-hour charts.
 - **Physics-based seeing** — when 7Timer is unreachable, the seeing estimate
   is driven by measured 250/500 hPa upper-air winds (jet-stream shear, the
   real driver of astronomical seeing) rather than surface conditions alone.
+- **AR mode** — on phones, the Sky tab can track your device's motion sensors
+  (compass corrected to true north via an embedded WMM2025 model) with
+  optional camera passthrough.
 - **Calendar export** — the 📅 button on the best-window pill downloads an
   `.ics` event for that night's window.
 - **Responsive layouts** — phone-first, a two-pane layout on tablets
@@ -88,6 +91,9 @@ timeline, day tabs for the full 14-day forecast, and 72-hour charts.
   figures for the Sky map (BSD-3-Clause).
 - `data/sky.json` is itself a derivative work of the HYG Database and is
   therefore also licensed CC BY-SA 4.0.
+- **[World Magnetic Model 2025](https://www.ncei.noaa.gov/products/world-magnetic-model)**
+  — declination coefficients (NOAA/NCEI & BGS, public domain); baked into
+  `js/wmmcof.js` via `node tools/build-wmm.mjs`.
 
 ## Tests & CI
 

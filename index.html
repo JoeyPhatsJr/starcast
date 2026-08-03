@@ -98,8 +98,16 @@
       <section id="view-sky" class="view hidden">
         <div id="sky-caption" class="sky-caption"></div>
         <div class="sky-wrap">
+          <video id="sky-camera" class="hidden" autoplay muted playsinline></video>
           <canvas id="sky-canvas"></canvas>
           <div id="sky-status" class="sky-status">Loading star catalog…</div>
+          <div class="sky-tools">
+            <button id="sky-ar-btn" class="sky-tool-btn" type="button" aria-pressed="false">AR</button>
+            <button id="sky-cam-btn" class="sky-tool-btn hidden" type="button" aria-pressed="false" aria-label="Camera passthrough">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </button>
+          </div>
+          <div id="sky-toast" class="sky-toast hidden"></div>
         </div>
         <p class="sky-hint">Drag to look around · pinch or scroll to zoom · time follows the scrubbed hour</p>
       </section>
@@ -230,7 +238,7 @@
         </div>
         <div class="panel">
           <h2>Sky map</h2>
-          <p class="help-p">The Sky tab draws the stars (to magnitude 5), all 88 constellations, the Moon, Sun, and naked-eye planets for the hour you've scrubbed to. Drag to look around; pinch or scroll to zoom. Positions are computed to about a degree — great for finding things by eye, not for pointing a telescope. Star data: <a href="https://www.astronexus.com/hyg" target="_blank" rel="noopener">HYG Database</a> (CC BY-SA 4.0). Constellation lines: <a href="https://github.com/ofrohn/d3-celestial" target="_blank" rel="noopener">d3-celestial</a> (BSD-3-Clause).</p>
+          <p class="help-p">The Sky tab draws the stars (to magnitude 5), all 88 constellations, the Moon, Sun, and naked-eye planets for the hour you've scrubbed to. Drag to look around; pinch or scroll to zoom. Positions are computed to about a degree — great for finding things by eye, not for pointing a telescope. Star data: <a href="https://www.astronexus.com/hyg" target="_blank" rel="noopener">HYG Database</a> (CC BY-SA 4.0). Constellation lines: <a href="https://github.com/ofrohn/d3-celestial" target="_blank" rel="noopener">d3-celestial</a> (BSD-3-Clause). On a phone, the AR button points the map with your device's motion sensors — headings are corrected from magnetic to true north using the World Magnetic Model (WMM2025, NOAA/NCEI &amp; BGS, public domain), and the camera button shows the live sky behind the stars.</p>
         </div>
         <div class="panel">
           <h2>Forecast grid &amp; charts</h2>
