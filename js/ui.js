@@ -347,6 +347,7 @@ export function renderBanner(state) {
   const now = Date.now();
   const isLive = now >= h.time && now < h.time + 3600000;
   $('live-ribbon').classList.toggle('hidden', !isLive);
+  $('btn-live').classList.toggle('live-now', isLive);
 
   // The hero sky reacts to the scrubbed hour: day, twilight, or deep night.
   document.body.classList.toggle('sky-day', h.sunAlt > 0);
@@ -395,19 +396,29 @@ export function renderTimelineSegments(state) {
   strip.setAttribute('aria-valuemax', String(day.hourIndices.length * 60 - 1));
   const n = day.hourIndices.length;
   const at = (i) => `${(((i + 0.5) / n) * 100).toFixed(1)}%`;
-  // Two stacked gradients, both anchored on CSS vars so night/color-blind
-  // modes re-palette them without a light leak:
-  //  - bottom 30%: hourly score bands fading into each other (no hard blocks)
-  //  - full strip: sun-altitude sky (night black → twilight purple → day blue)
-  const score = day.hourIndices.map((idx, i) => `var(--${band(state.hours[idx].score)}) ${at(i)}`);
+  // Both gradients are anchored on CSS vars so night/color-blind modes
+  // re-palette them without a light leak. The strip itself is the sun-
+  // altitude sky (night black → twilight purple → day blue)…
   const sky = day.hourIndices.map((idx, i) => {
     const alt = state.hours[idx].sunAlt;
     const c = alt >= 0 ? 'var(--sky-dayc)' : alt > -18 ? 'var(--sky-twic)' : 'var(--sky-nightc)';
     return `${c} ${at(i)}`;
   });
-  strip.style.background =
-    `linear-gradient(90deg, ${score.join(', ')}) left bottom / 100% 30% no-repeat, ` +
-    `linear-gradient(90deg, ${sky.join(', ')})`;
+  strip.style.background = `linear-gradient(90deg, ${sky.join(', ')})`;
+  // …and the score bar below it fades between hourly band colors, forcing a
+  // yellow (--marginal) stop on every direct green↔red boundary so the blend
+  // passes through yellow instead of muddy sRGB green-red brown.
+  const stops = [];
+  let prevBand = null;
+  day.hourIndices.forEach((idx, i) => {
+    const b = band(state.hours[idx].score);
+    if ((prevBand === 'good' && b === 'bad') || (prevBand === 'bad' && b === 'good')) {
+      stops.push(`var(--marginal) ${((i / n) * 100).toFixed(1)}%`);
+    }
+    stops.push(`var(--${b}) ${at(i)}`);
+    prevBand = b;
+  });
+  $('score-strip').style.background = `linear-gradient(90deg, ${stops.join(', ')})`;
   // Tick labels on the 6-hour boundaries, located by LOCAL hour so DST days
   // (23/25 columns) label the right spots.
   const tz = state.prefs.tz;
