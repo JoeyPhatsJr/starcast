@@ -14,7 +14,7 @@ import { overallScore } from './score.js';
 import { fetchLightPollution } from './lightpollution.js';
 import { fetchKpForecast } from './tonight.js';
 import { parseShareCoords, groupByLocalDate, buildICS, nightCloudMean, shouldAutoEnterAR } from './logic.js';
-import { dragView, zoomView } from './skymap.js';
+import { dragView, zoomView, ALT_MIN, ALT_MAX } from './skymap.js';
 import { orientationToBasis, rotateBasisZ, smoothBasis, basisToView, headingOffset } from './armath.js';
 import { declination, decimalYear } from './wmm.js';
 import * as UI from './ui.js';
@@ -901,7 +901,9 @@ function wireSky() {
     'wheel',
     (e) => {
       e.preventDefault();
-      state.sky = zoomView(state.sky, e.deltaY < 0 ? 1.1 : 1 / 1.1);
+      // Scale by deltaY magnitude: trackpads send many small deltas, wheel
+      // notches ~±100 — exp keeps zoom-in/out symmetric; clamp big jumps.
+      state.sky = zoomView(state.sky, Math.min(1.4, Math.max(1 / 1.4, Math.exp(-e.deltaY * 0.0015))));
       scheduleSkyRender();
     },
     { passive: false }
@@ -964,7 +966,7 @@ function onOrientation(e) {
   const v = basisToView(state.ar.basis);
   state.sky = {
     az: v.az,
-    alt: Math.max(-30, Math.min(90, v.alt)),
+    alt: Math.max(ALT_MIN, Math.min(ALT_MAX, v.alt)),
     fov: state.sky.fov,
     roll: v.roll,
   };
