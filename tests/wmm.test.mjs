@@ -34,3 +34,8 @@ test('decimalYear maps mid-year sensibly', () => {
   const y = decimalYear(new Date('2026-07-02T12:00:00Z'));
   assert.ok(y > 2026.49 && y < 2026.51, `${y}`);
 });
+
+test('declination is finite at the exact poles', () => {
+  assert.ok(Number.isFinite(declination(90, 0, 2026.5)));
+  assert.ok(Number.isFinite(declination(-90, 45, 2026.5)));
+});

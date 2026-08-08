@@ -49,6 +49,22 @@ for (let i = 1; i < rows.length; i++) {
 }
 stars.sort((a, b) => a[2] - b[2]); // brightest first → draw/label priority
 
+// Drop labels (not stars) within 0.1° of an already-labeled brighter star —
+// α Cen A/B ("Rigil Kentaurus" + "Toliman") otherwise label twice at one spot.
+// 0.1° keeps legitimately close pairs like Mizar/Alcor (0.197° apart).
+const labeled = [];
+for (const s of stars) {
+  if (!s[3]) continue;
+  const cosD = Math.cos((s[1] * Math.PI) / 180);
+  const clash = labeled.some(([ra, dec]) => {
+    let dRa = Math.abs(s[0] - ra);
+    if (dRa > 180) dRa = 360 - dRa;
+    return Math.hypot(dRa * cosD, s[1] - dec) <= 0.1;
+  });
+  if (clash) s.length = 3; // strip the name element
+  else labeled.push([s[0], s[1]]);
+}
+
 const geo = await (await fetch(LINES_URL)).json();
 const lines = [];
 for (const feat of geo.features) {

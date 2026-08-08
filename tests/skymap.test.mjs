@@ -73,3 +73,17 @@ test('horizon is visible at alt 25 and gone looking straight up zoomed in', () =
   assert.ok(horizonDrawList(VIEW, 400, 300).length > 0);
   assert.equal(horizonDrawList({ az: 0, alt: 89, fov: 30 }, 400, 300).length, 0);
 });
+
+test('starDrawList margin widens the offscreen cull window', () => {
+  const jd = julianDate(new Date('2026-08-01T04:00:00Z'));
+  const fc = frameContext(jd, NYC.lat, NYC.lon);
+  // A dense above-horizon grid so some stars land just outside the viewport.
+  const grid = [];
+  for (let ra = 0; ra < 360; ra += 4) for (let dec = -20; dec <= 80; dec += 5) grid.push([ra, dec, 3]);
+  const view = { az: 90, alt: 60, fov: 100 };
+  const tight = starDrawList(grid, fc, view, 300, 500, 10);
+  const wide = starDrawList(grid, fc, view, 300, 500, 400);
+  assert.ok(wide.length > tight.length, `wide ${wide.length} vs tight ${tight.length}`);
+  const def = starDrawList(grid, fc, view, 300, 500);
+  assert.equal(def.length, tight.length, 'default margin stays 10');
+});
