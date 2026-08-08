@@ -89,13 +89,13 @@ export function magToRadius(mag) {
 }
 
 /** Screen draw list for catalog stars: culls below-horizon and offscreen. */
-export function starDrawList(stars, fc, view, w, h) {
+export function starDrawList(stars, fc, view, w, h, margin = 10) {
   const out = [];
   for (const s of stars) {
     const { alt, az } = starHorizontal(s[0], s[1], fc);
     if (alt < -0.5) continue;
     const p = project(az, alt, view, w, h);
-    if (!p || p.x < -10 || p.x > w + 10 || p.y < -10 || p.y > h + 10) continue;
+    if (!p || p.x < -margin || p.x > w + margin || p.y < -margin || p.y > h + margin) continue;
     out.push({ x: p.x, y: p.y, r: magToRadius(s[2]), name: s[3] || null });
   }
   return out;

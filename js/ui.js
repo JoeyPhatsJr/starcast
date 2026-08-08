@@ -1150,6 +1150,9 @@ export function renderSky(state) {
     ctx.rotate(-roll * Math.PI / 180);
     ctx.translate(-w / 2, -h / 2);
   }
+  // A rolled canvas can reveal anything inside the viewport's circumscribed
+  // circle — widen the star cull to cover it, else corners pop in under roll.
+  const cullMargin = roll ? (Math.hypot(w, h) - Math.min(w, h)) / 2 + 10 : 10;
 
   // Background keyed to the scrubbed hour's sun altitude (day/twilight/night)
   // — unless the camera feed is showing through, in which case a translucent
@@ -1187,7 +1190,7 @@ export function renderSky(state) {
       ctx.stroke();
     }
     ctx.fillStyle = '#f2f5fa';
-    for (const s of starDrawList(state.skyData.stars, fc, view, w, h)) {
+    for (const s of starDrawList(state.skyData.stars, fc, view, w, h, cullMargin)) {
       ctx.globalAlpha = Math.min(1, 0.35 + s.r * 0.28);
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
