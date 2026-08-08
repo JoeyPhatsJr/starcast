@@ -3,6 +3,10 @@
 
 :root {
   --bg: #0c1428;           /* page background, deep navy */
+  /* Timeline sky gradient anchors (night → twilight → day) */
+  --sky-nightc: #04060d;
+  --sky-twic: #453a6d;
+  --sky-dayc: #2f5f9e;
   --header-bg: #17264d;    /* header + nav bars */
   --panel: #101c3a;        /* cards/sheets */
   --text: #f2f5fa;
@@ -392,13 +396,12 @@ main {
   background: linear-gradient(rgba(255, 255, 255, 0.10), transparent 45%);
   pointer-events: none;
 }
-.seg { flex: 1; opacity: 0.9; }
+/* Slim score bar along the bottom edge — the strip background behind it is
+   the sun-altitude sky gradient (set inline by renderTimelineSegments). */
+.seg { flex: 1; align-self: flex-end; height: 30%; opacity: 0.95; }
 .seg.band-good { background: var(--good); }
 .seg.band-marginal { background: var(--marginal); }
 .seg.band-bad { background: var(--bad); }
-.seg.daylight {
-  background-image: linear-gradient(rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.35));
-}
 .playhead {
   position: absolute;
   top: 0;
@@ -1031,6 +1034,10 @@ body.cb {
  * with a filter. Declared last so it also wins over the CB palette. */
 body.night {
   --bg: #060101;
+  /* Sky gradient re-ramped to red luminance — brighter red = brighter sky */
+  --sky-nightc: #000;
+  --sky-twic: #2a0a06;
+  --sky-dayc: #571711;
   --header-bg: #170404;
   --panel: #110303;
   --text: #ff6157;

@@ -396,9 +396,19 @@ export function renderTimelineSegments(state) {
   for (const idx of day.hourIndices) {
     const h = state.hours[idx];
     const seg = document.createElement('div');
-    seg.className = `seg band-${band(h.score)}${h.isDay === 1 ? ' daylight' : ''}`;
+    seg.className = `seg band-${band(h.score)}`;
     strip.insertBefore(seg, playhead);
   }
+  // Sun-altitude sky gradient: night black → twilight purple → day blue,
+  // fading between hourly stops. Anchors are CSS vars so night mode re-ramps
+  // the whole strip to red without a light leak.
+  const n = day.hourIndices.length;
+  const stops = day.hourIndices.map((idx, i) => {
+    const alt = state.hours[idx].sunAlt;
+    const c = alt >= 0 ? 'var(--sky-dayc)' : alt > -18 ? 'var(--sky-twic)' : 'var(--sky-nightc)';
+    return `${c} ${(((i + 0.5) / n) * 100).toFixed(1)}%`;
+  });
+  strip.style.background = `linear-gradient(90deg, ${stops.join(', ')})`;
   updatePlayhead(state);
 }
 
