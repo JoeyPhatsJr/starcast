@@ -35,6 +35,7 @@ const state = {
   daily: [],
   selectedDay: 0,
   selectedHour: 0,
+  selectedMinute: 0,
   currentHourIndex: 0,
   chartRange: 72, // hours shown on the Charts tab
   lightPollution: null, // { ratio, mpsas, bortle } from the atlas, if fetched
@@ -356,6 +357,12 @@ function initSelection(first) {
     const day = state.days[state.selectedDay];
     const pos = day.hourIndices.indexOf(state.currentHourIndex);
     state.selectedHour = pos >= 0 ? pos : 0;
+    // Minute-of-record from the epoch delta, NOT wall-clock minutes — some
+    // timezone offsets are :30/:45 so the two can disagree.
+    const cur = pos >= 0 ? state.hours[state.currentHourIndex] : null;
+    state.selectedMinute = cur
+      ? Math.max(0, Math.min(59, Math.floor((Date.now() - cur.time) / 60000)))
+      : 0;
   }
   state.selectedDay = Math.min(state.selectedDay, state.days.length - 1);
   const day = state.days[state.selectedDay];
@@ -539,13 +546,15 @@ function applyRoute() {
 
 /* ================= Interactions ================= */
 
-function setHour(pos) {
+function setHour(pos, minute = 0) {
   if (!Number.isFinite(pos)) return; // e.g. a scrub computed against a hidden strip
   const day = state.days[state.selectedDay];
   if (!day) return;
   const clamped = Math.max(0, Math.min(day.hourIndices.length - 1, pos));
-  if (clamped === state.selectedHour) return;
+  const m = Math.max(0, Math.min(59, Math.floor(minute)));
+  if (clamped === state.selectedHour && m === state.selectedMinute) return;
   state.selectedHour = clamped;
+  state.selectedMinute = m;
   renderSelection();
   renderSelectionExtras();
 }
@@ -566,29 +575,35 @@ function wireTimeline() {
   const strip = document.getElementById('timeline-strip');
   let dragging = false;
 
-  const hourFromEvent = (e) => {
+  const scrubFromEvent = (e) => {
     const day = state.days[state.selectedDay];
-    if (!day) return 0;
+    if (!day) return null;
     const rect = strip.getBoundingClientRect();
     const n = day.hourIndices.length;
-    return Math.floor(((e.clientX - rect.left) / rect.width) * n);
+    const t = Math.max(0, Math.min(0.9999, (e.clientX - rect.left) / rect.width)) * n * 60;
+    return { pos: Math.floor(t / 60), minute: Math.floor(t % 60) };
   };
 
   strip.addEventListener('pointerdown', (e) => {
     if (state.status !== 'ready') return;
     dragging = true;
     strip.setPointerCapture(e.pointerId);
-    setHour(hourFromEvent(e));
+    const s = scrubFromEvent(e);
+    if (s) setHour(s.pos, s.minute);
   });
   strip.addEventListener('pointermove', (e) => {
-    if (dragging) setHour(hourFromEvent(e));
+    if (!dragging) return;
+    const s = scrubFromEvent(e);
+    if (s) setHour(s.pos, s.minute);
   });
   strip.addEventListener('pointerup', () => { dragging = false; });
   strip.addEventListener('pointercancel', () => { dragging = false; });
 
   // Keyboard support on the slider strip
   strip.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowLeft') { setHour(state.selectedHour - 1); e.preventDefault(); }
+    // From a mid-hour scrub position, ArrowLeft first snaps back to the top
+    // of the current hour (standard scrubber convention).
+    if (e.key === 'ArrowLeft') { setHour(state.selectedHour - (state.selectedMinute ? 0 : 1)); e.preventDefault(); }
     if (e.key === 'ArrowRight') { setHour(state.selectedHour + 1); e.preventDefault(); }
   });
 }
