@@ -388,27 +388,38 @@ export function showUpdateToast() {
 
 export function renderTimelineSegments(state) {
   const strip = $('timeline-strip');
-  strip.querySelectorAll('.seg').forEach((n) => n.remove());
+  strip.querySelectorAll('.tl-tick').forEach((n) => n.remove());
   const day = state.days[state.selectedDay];
   if (!day) return;
   const playhead = $('playhead');
   strip.setAttribute('aria-valuemax', String(day.hourIndices.length * 60 - 1));
-  for (const idx of day.hourIndices) {
-    const h = state.hours[idx];
-    const seg = document.createElement('div');
-    seg.className = `seg band-${band(h.score)}`;
-    strip.insertBefore(seg, playhead);
-  }
-  // Sun-altitude sky gradient: night black → twilight purple → day blue,
-  // fading between hourly stops. Anchors are CSS vars so night mode re-ramps
-  // the whole strip to red without a light leak.
   const n = day.hourIndices.length;
-  const stops = day.hourIndices.map((idx, i) => {
+  const at = (i) => `${(((i + 0.5) / n) * 100).toFixed(1)}%`;
+  // Two stacked gradients, both anchored on CSS vars so night/color-blind
+  // modes re-palette them without a light leak:
+  //  - bottom 30%: hourly score bands fading into each other (no hard blocks)
+  //  - full strip: sun-altitude sky (night black → twilight purple → day blue)
+  const score = day.hourIndices.map((idx, i) => `var(--${band(state.hours[idx].score)}) ${at(i)}`);
+  const sky = day.hourIndices.map((idx, i) => {
     const alt = state.hours[idx].sunAlt;
     const c = alt >= 0 ? 'var(--sky-dayc)' : alt > -18 ? 'var(--sky-twic)' : 'var(--sky-nightc)';
-    return `${c} ${(((i + 0.5) / n) * 100).toFixed(1)}%`;
+    return `${c} ${at(i)}`;
   });
-  strip.style.background = `linear-gradient(90deg, ${stops.join(', ')})`;
+  strip.style.background =
+    `linear-gradient(90deg, ${score.join(', ')}) left bottom / 100% 30% no-repeat, ` +
+    `linear-gradient(90deg, ${sky.join(', ')})`;
+  // Tick labels on the 6-hour boundaries, located by LOCAL hour so DST days
+  // (23/25 columns) label the right spots.
+  const tz = state.prefs.tz;
+  day.hourIndices.forEach((idx, i) => {
+    const lh = localHour(state.hours[idx].time, tz);
+    if (lh % 6 !== 0) return;
+    const tick = document.createElement('span');
+    tick.className = i === 0 ? 'tl-tick tl-tick-edge' : 'tl-tick';
+    tick.textContent = lh === 0 ? '12AM' : lh === 12 ? '12PM' : lh < 12 ? `${lh}AM` : `${lh - 12}PM`;
+    tick.style.left = `${((i / n) * 100).toFixed(2)}%`;
+    strip.insertBefore(tick, playhead);
+  });
   updatePlayhead(state);
 }
 

@@ -396,12 +396,21 @@ main {
   background: linear-gradient(rgba(255, 255, 255, 0.10), transparent 45%);
   pointer-events: none;
 }
-/* Slim score bar along the bottom edge — the strip background behind it is
-   the sun-altitude sky gradient (set inline by renderTimelineSegments). */
-.seg { flex: 1; align-self: flex-end; height: 30%; opacity: 0.95; }
-.seg.band-good { background: var(--good); }
-.seg.band-marginal { background: var(--marginal); }
-.seg.band-bad { background: var(--bad); }
+/* The strip's score bar and sky backdrop are both inline gradients set by
+   renderTimelineSegments; only the tick labels need styling here. */
+.tl-tick {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  user-select: none;
+}
+.tl-tick-edge { transform: none; margin-left: 4px; }
 .playhead {
   position: absolute;
   top: 0;
@@ -1264,7 +1273,6 @@ body {
   border-color: rgba(255, 255, 255, 0.14);
   box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.3);
 }
-.seg { opacity: 0.95; }
 .day-tab { border-radius: 999px; padding: 7px 13px 6px; }
 .day-tab.active {
   background: rgba(255, 255, 255, 0.16);

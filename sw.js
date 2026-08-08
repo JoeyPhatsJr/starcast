@@ -7,7 +7,7 @@
 // NOTE FOR DEPLOYS: bump VERSION whenever app files change, so clients
 // drop the old precache on their next visit.
 
-const VERSION = 'starcast-v16';
+const VERSION = 'starcast-v17';
 const DATA_CACHE = `${VERSION}-data`;
 
 const SHELL = [
