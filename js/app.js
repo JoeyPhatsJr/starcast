@@ -571,8 +571,21 @@ function setDay(i) {
   UI.renderTonight(state);
 }
 
+/** Snap the selection back to the real current day + hour + minute. */
+function jumpToLive() {
+  if (state.status !== 'ready' || !state.days.length) return;
+  updateCurrentHour(); // the page may have been open across an hour boundary
+  const di = state.days.findIndex((d) => d.hourIndices.includes(state.currentHourIndex));
+  if (di < 0) return;
+  const cur = state.hours[state.currentHourIndex];
+  const minute = Math.max(0, Math.min(59, Math.floor((Date.now() - cur.time) / 60000)));
+  if (di !== state.selectedDay) setDay(di);
+  setHour(state.days[di].hourIndices.indexOf(state.currentHourIndex), minute);
+}
+
 function wireTimeline() {
   const strip = document.getElementById('timeline-strip');
+  document.getElementById('btn-live').addEventListener('click', jumpToLive);
   let dragging = false;
 
   const scrubFromEvent = (e) => {

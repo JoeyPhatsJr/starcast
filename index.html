@@ -58,10 +58,11 @@
 
         <!-- Scrubber directly under the verdict: thumb-reachable while the
              tiles below update in view. -->
-        <div class="timeline-head"><span id="data-age" class="data-age"></span><span id="timeline-label">▾ —</span></div>
+        <div class="timeline-head"><span id="data-age" class="data-age"></span><button id="btn-live" class="live-btn" type="button" aria-label="Jump to the current time">● LIVE</button><span id="timeline-label">▾ —</span></div>
         <div id="timeline-strip" class="strip" role="slider" aria-label="Time of day" aria-valuemin="0" aria-valuemax="1439" tabindex="0">
           <div id="playhead" class="playhead hidden"><div class="grab"></div></div>
         </div>
+        <div id="score-strip" aria-hidden="true"></div>
         <div id="day-tabs" class="day-tabs" role="tablist"></div>
 
         <div id="tile-grid" class="grid">

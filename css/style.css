@@ -363,7 +363,35 @@ main {
 .timeline-head {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   margin-bottom: 5px;
+}
+.live-btn {
+  margin-left: auto;
+  margin-right: 8px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  border-radius: 999px;
+  padding: 3px 9px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.live-btn.live-now { color: var(--accent); border-color: var(--accent); }
+/* Score bar: a separate slim strip below the scrubber; its band-color
+   gradient (with yellow forced between green↔red) is set inline by
+   renderTimelineSegments. */
+#score-strip {
+  height: 10px;
+  margin-top: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: #0a1120;
 }
 #timeline-label {
   font-size: 12px;
@@ -976,7 +1004,7 @@ body.loading .meter { visibility: hidden; }
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     /* Leftover height (the tiles column is tall) lands in the final row,
        not stretched across the scrubber/tabs rows. */
-    grid-template-rows: auto auto auto auto auto auto auto 1fr;
+    grid-template-rows: auto auto auto auto auto auto auto auto 1fr;
     column-gap: 20px;
     align-content: start;
     grid-template-areas:
@@ -985,6 +1013,7 @@ body.loading .meter { visibility: hidden; }
       "breakdown breakdown"
       "thead tiles"
       "strip tiles"
+      "scorebar tiles"
       "tabs tiles"
       "tonight tiles"
       "spots tiles";
@@ -998,6 +1027,7 @@ body.loading .meter { visibility: hidden; }
   #view-conditions > #breakdown { grid-area: breakdown; }
   #view-conditions > .timeline-head { grid-area: thead; }
   #view-conditions > #timeline-strip { grid-area: strip; }
+  #view-conditions > #score-strip { grid-area: scorebar; align-self: start; }
   #view-conditions > #day-tabs { grid-area: tabs; }
   #view-conditions > #tile-grid { grid-area: tiles; margin-bottom: 0; align-content: start; }
   #view-conditions > #tonight-panel { grid-area: tonight; align-self: start; margin-top: 0; }
