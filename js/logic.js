@@ -150,3 +150,30 @@ export function shouldAutoEnterAR(ctx) {
     && ctx.hasSensorApi === true
     && ctx.coarsePointer === true;
 }
+
+/* Synthesize a record between two consecutive hour records for minute-level
+ * scrubbing. Numeric fields lerp (generically, so future side-channel fields
+ * interpolate for free); the categorical set and all non-numerics snap to the
+ * nearest hour; fields present on one side only take that side. `score` is
+ * omitted — callers rescore on the lerped canonical values. `b` may be null
+ * at the forecast end: values clamp to `a` but `time` still advances, since
+ * consecutive hour records are always exactly 3600s apart (true UTC epochs). */
+const INTERP_CATEGORICAL = new Set(['weatherCode', 'isDay', 'time', 'score']);
+export function interpolateHours(a, b, frac) {
+  if (!b) b = a;
+  const nearest = frac < 0.5 ? a : b;
+  const out = {};
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (INTERP_CATEGORICAL.has(k)) { out[k] = nearest[k]; continue; }
+    const av = a[k], bv = b[k];
+    const aNum = typeof av === 'number' && Number.isFinite(av);
+    const bNum = typeof bv === 'number' && Number.isFinite(bv);
+    if (aNum && bNum) out[k] = av + (bv - av) * frac;
+    else if (aNum && (bv == null || Number.isNaN(bv))) out[k] = av;
+    else if (bNum && (av == null || Number.isNaN(av))) out[k] = bv;
+    else out[k] = nearest[k];
+  }
+  out.time = a.time + frac * 3600000;
+  delete out.score;
+  return out;
+}

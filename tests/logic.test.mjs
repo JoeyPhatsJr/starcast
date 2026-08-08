@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {
   parseShareCoords, groupByLocalDate, nightHoursOf,
   bestRun, bestWindowIn, buildICS, icsEscape, nightCloudMean, dewRiskStart,
-  shouldAutoEnterAR,
+  shouldAutoEnterAR, interpolateHours,
 } from '../js/logic.js';
 
 /* ================= Share-param parsing ================= */
@@ -182,4 +182,44 @@ test('shouldAutoEnterAR: defaults on, each gate can veto', () => {
   assert.equal(shouldAutoEnterAR({ ...ok, latFinite: false }), false); // no location yet
   assert.equal(shouldAutoEnterAR({ ...ok, hasSensorApi: false }), false);
   assert.equal(shouldAutoEnterAR({ ...ok, coarsePointer: false }), false); // desktop
+});
+
+/* ================= interpolateHours (minute-level scrubbing) ================= */
+
+test('interpolateHours lerps numerics, snaps categoricals, computes exact time', () => {
+  const a = { time: 1000 * 3600e3, cloud: 40, windMph: 10, weatherCode: 2, isDay: 0,
+              planets: ['V'], moonWaxing: true, seeingIsEstimate: true, score: 0.9 };
+  const b = { time: 1001 * 3600e3, cloud: 60, windMph: 20, weatherCode: 3, isDay: 1,
+              planets: ['V', 'J'], moonWaxing: true, seeingIsEstimate: true, score: 0.1 };
+  const h = interpolateHours(a, b, 0.25);
+  assert.equal(h.cloud, 45);
+  assert.equal(h.windMph, 12.5);
+  assert.equal(h.time, a.time + 0.25 * 3600e3);
+  assert.equal(h.weatherCode, 2);          // nearest at 0.25 → a
+  assert.deepEqual(h.planets, ['V']);
+  assert.equal(interpolateHours(a, b, 0.75).weatherCode, 3); // nearest → b
+  assert.equal(h.score, undefined);        // caller rescores
+});
+
+test('interpolateHours: frac 0/1 identity on numerics', () => {
+  const a = { time: 0, cloud: 40 }, b = { time: 3600e3, cloud: 60 };
+  assert.equal(interpolateHours(a, b, 0).cloud, 40);
+  assert.equal(interpolateHours(a, b, 1).cloud, 60);
+});
+
+test('interpolateHours: one-sided and missing fields never produce NaN', () => {
+  const a = { time: 0, cloud: 40, kp: 3 };           // kp only on a
+  const b = { time: 3600e3, cloud: 60, aod: 0.2 };   // aod only on b
+  const h = interpolateHours(a, b, 0.5);
+  assert.equal(h.kp, 3);
+  assert.equal(h.aod, 0.2);
+  for (const v of Object.values(h)) assert.ok(typeof v !== 'number' || Number.isFinite(v));
+});
+
+test('interpolateHours clamps at forecast end (no b)', () => {
+  const a = { time: 0, cloud: 40, weatherCode: 2 };
+  const h = interpolateHours(a, null, 0.5);
+  assert.equal(h.cloud, 40);
+  assert.equal(h.weatherCode, 2);
+  assert.equal(h.time, 0.5 * 3600e3);      // clock still advances
 });
