@@ -5,10 +5,10 @@
 // nodes, so scrubbing the timeline stays cheap. Only day switches and data
 // refreshes rebuild nodes (segments, tabs, charts).
 
-import { scoreMetric, verdict, band, WEIGHTS } from './score.js';
+import { scoreMetric, verdict, band, WEIGHTS, overallScore } from './score.js';
 import { activeShowers, milkyWayPeak, phaseName, kpNeeded } from './tonight.js';
 import { planetNightEvents, julianDate, sunAltitude, skyBodies } from './astro.js';
-import { nightHoursOf, bestWindowIn, dewRiskStart } from './logic.js';
+import { nightHoursOf, bestWindowIn, dewRiskStart, interpolateHours } from './logic.js';
 import {
   project, frameContext, starDrawList, lineDrawList, horizonDrawList, cardinalName, CARDINALS,
 } from './skymap.js';
@@ -58,7 +58,19 @@ export function getSelectedHour(state) {
   const day = state.days[state.selectedDay];
   if (!day || !day.hourIndices.length) return null;
   const pos = Math.min(state.selectedHour, day.hourIndices.length - 1);
-  return state.hours[day.hourIndices[pos]];
+  const gi = day.hourIndices[pos];
+  const a = state.hours[gi];
+  const minute = state.selectedMinute || 0;
+  if (!minute) return a;
+  // Global successor — crosses day/DST boundaries; null at forecast end (clamps).
+  const h = interpolateHours(a, state.hours[gi + 1] || null, minute / 60);
+  h.score = overallScore(h, {
+    bortle: state.prefs.bortle,
+    moonAltitude: h.moonAlt,
+    sunAltitude: h.sunAlt,
+    moonIllum: h.moonIllum,
+  });
+  return h;
 }
 
 /* ================= Star field ================= */
