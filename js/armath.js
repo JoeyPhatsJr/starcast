@@ -135,6 +135,84 @@ export function smoothView(prev, next, k) {
   return { az, alt, roll };
 }
 
+/**
+ * Angular distance between two bases, in degrees — the larger of the two axis
+ * rotations, so a pure roll counts as movement just as much as a pure pan.
+ */
+export function basisAngleDeg(a, b) {
+  if (!a || !b) return 0;
+  const dot = (p, q) => Math.max(-1, Math.min(1, p[0] * q[0] + p[1] * q[1] + p[2] * q[2]));
+  return Math.max(Math.acos(dot(a.f, b.f)), Math.acos(dot(a.u, b.u))) * RAD;
+}
+
+/**
+ * Exponential-smoothing factor for an elapsed time and a time constant.
+ * Applying a FIXED per-event k made responsiveness depend on the device's
+ * sensor rate (iOS ~60 Hz, some Androids 15–20 Hz); deriving k from dt makes
+ * the filter behave identically on both.
+ */
+export function smoothingAlpha(dtMs, tauMs) {
+  if (!(dtMs > 0)) return 0;
+  if (!(tauMs > 0)) return 1;
+  return 1 - Math.exp(-dtMs / tauMs);
+}
+
+/**
+ * Angular rate of a sensor stream, in deg/s, measured as NET displacement
+ * over a fixed time window.
+ *
+ * The obvious implementation — differentiate every event — is quietly
+ * rate-dependent, because the per-event delta is a magnitude and noise never
+ * cancels: the same 0.3° of jitter reads as 18°/s at 60 Hz but 4.5°/s at
+ * 15 Hz. Feeding that to adaptiveTau would pick a different time constant on
+ * every device, reintroducing exactly the inconsistency this is meant to fix.
+ * Measuring from a reference basis over ≥ windowMs lets the noise cancel.
+ *
+ * Pure: takes and returns the tracker, never mutates it.
+ */
+export function updateRate(tracker, basis, dtMs, windowMs = 80) {
+  const prev = tracker || {};
+  if (!prev.ref || !basis) return { ref: basis || null, dt: 0, rate: prev.rate || 0 };
+  const dt = (prev.dt || 0) + (dtMs > 0 ? dtMs : 0);
+  if (dt < windowMs) return { ref: prev.ref, dt, rate: prev.rate || 0 };
+  return { ref: basis, dt: 0, rate: (basisAngleDeg(prev.ref, basis) * 1000) / dt };
+}
+
+/**
+ * Speed-adaptive time constant, in the spirit of the "1€ filter". Holding
+ * still, the filter is heavy and hand tremor vanishes; panning deliberately,
+ * it lightens so the view does not swim behind the phone. A single fixed
+ * constant cannot do both, which is why AR felt jittery AND laggy at once.
+ */
+/**
+ * The time constant the render loop should actually use: the speed-adaptive
+ * value, but never shorter than the interval between sensor samples.
+ *
+ * Easing toward a target that only moves every 67 ms (a 15 Hz device) with a
+ * 45 ms time constant produces a visible "settle, jump, settle" staircase —
+ * the view arrives, waits, then lurches. Holding tau at or above the sample
+ * interval spreads each step across the whole gap instead, which is what
+ * makes a low-rate Android feel like a 60 Hz iPhone.
+ */
+export function smoothingTau(speedDegPerSec, sensorPeriodMs) {
+  const floor = sensorPeriodMs > 0 ? Math.min(200, sensorPeriodMs * 1.2) : 0;
+  return Math.max(adaptiveTau(speedDegPerSec), floor);
+}
+
+// Tuned 2026-08-08 by simulating a 30°/s pan and a held-still phone at both
+// 60 Hz and 15 Hz sensor rates (see tests/armath.test.mjs). Against the old
+// fixed k = 0.25, this holds panning lag within ~0.5° while cutting held-still
+// jitter about 3–4×, which is the symptom that was actually reported.
+export function adaptiveTau(speedDegPerSec, slow = 200, fast = 45, ref = 25, deadband = 8) {
+  // The deadband matters as much as the ramp: sensor noise makes a perfectly
+  // still phone report several deg/s of apparent motion, which would lighten
+  // the filter exactly when the heaviest smoothing is wanted. Rates below the
+  // deadband count as "holding still".
+  const s = Math.max(0, (speedDegPerSec || 0) - deadband);
+  const t = Math.min(1, s / (ref > 0 ? ref : 40));
+  return slow + (fast - slow) * t;
+}
+
 /** iOS compass fusion: webkitCompassHeading is magnetic and absolute, alpha is
  * smooth but arbitrarily referenced. Maintain offset so alpha+offset ≈ absolute
  * alpha. Snap on first sample, then converge slowly (compass is noisy). */

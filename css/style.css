@@ -1421,6 +1421,10 @@ body.sky-twilight:not(.night) {
   cursor: grab;
 }
 #sky-canvas:active { cursor: grabbing; }
+#sky-canvas:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 .sky-caption {
   font-size: 12px;
   color: var(--text-dim);
@@ -1488,6 +1492,52 @@ body.sky-twilight:not(.night) {
   text-align: center;
   pointer-events: none;
 }
+/* Tap-to-identify card. Sits bottom-left so it never covers the tool buttons
+   (top-right) or the toast (bottom-centre). */
+.sky-info {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 3;
+  max-width: calc(100% - 20px);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 7px 10px 8px;
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.sky-info-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.2;
+}
+.sky-info-main strong { font-weight: 600; }
+.sky-info-close {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.sky-info-close:hover { color: var(--text); }
+.sky-info-sub {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
 #sky-camera {
   position: absolute;
   inset: 0;
