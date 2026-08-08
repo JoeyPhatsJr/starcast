@@ -54,13 +54,11 @@ export function localHour(ms, tz) {
 
 /* ================= Selection helper ================= */
 
-export function getSelectedHour(state) {
-  const day = state.days[state.selectedDay];
-  if (!day || !day.hourIndices.length) return null;
-  const pos = Math.min(state.selectedHour, day.hourIndices.length - 1);
-  const gi = day.hourIndices[pos];
+/** Record at `minute` past global hour `gi`, interpolated and rescored — the
+ * ONE code path for sub-hour records, so the banner, tiles, and score bar can
+ * never disagree about what a given instant scores. */
+function scoredRecordAt(state, gi, minute) {
   const a = state.hours[gi];
-  const minute = state.selectedMinute || 0;
   if (!minute) return a;
   // Global successor — crosses day/DST boundaries; null at forecast end (clamps).
   const h = interpolateHours(a, state.hours[gi + 1] || null, minute / 60);
@@ -71,6 +69,13 @@ export function getSelectedHour(state) {
     moonIllum: h.moonIllum,
   });
   return h;
+}
+
+export function getSelectedHour(state) {
+  const day = state.days[state.selectedDay];
+  if (!day || !day.hourIndices.length) return null;
+  const pos = Math.min(state.selectedHour, day.hourIndices.length - 1);
+  return scoredRecordAt(state, day.hourIndices[pos], state.selectedMinute || 0);
 }
 
 /* ================= Star field ================= */
@@ -405,19 +410,27 @@ export function renderTimelineSegments(state) {
     return `${c} ${at(i)}`;
   });
   strip.style.background = `linear-gradient(90deg, ${sky.join(', ')})`;
-  // …and the score bar below it fades between hourly band colors, forcing a
-  // yellow (--marginal) stop on every direct green↔red boundary so the blend
-  // passes through yellow instead of muddy sRGB green-red brown.
-  const stops = [];
-  let prevBand = null;
-  day.hourIndices.forEach((idx, i) => {
-    const b = band(state.hours[idx].score);
-    if ((prevBand === 'good' && b === 'bad') || (prevBand === 'bad' && b === 'good')) {
-      stops.push(`var(--marginal) ${((i / n) * 100).toFixed(1)}%`);
+  // …and the score bar below it is band-ACCURATE: the interpolated score is
+  // sampled every 10 minutes through the same scoring path as the banner, so
+  // the color under the playhead always agrees with the verdict. Boundaries
+  // land where the score really crosses 0.66/0.33 (a green→red slide shows
+  // yellow exactly as long as the score spends in the marginal band).
+  const SAMPLES = 6; // per hour
+  const bands = [];
+  for (const idx of day.hourIndices) {
+    for (let s = 0; s < SAMPLES; s++) {
+      bands.push(band(scoredRecordAt(state, idx, (s * 60) / SAMPLES).score));
     }
-    stops.push(`var(--${b}) ${at(i)}`);
-    prevBand = b;
-  });
+  }
+  const stops = [`var(--${bands[0]}) 0%`];
+  for (let k = 1; k < bands.length; k++) {
+    if (bands[k] !== bands[k - 1]) {
+      const p = (k / bands.length) * 100;
+      stops.push(`var(--${bands[k - 1]}) ${(p - 0.5).toFixed(1)}%`);
+      stops.push(`var(--${bands[k]}) ${(p + 0.5).toFixed(1)}%`);
+    }
+  }
+  stops.push(`var(--${bands[bands.length - 1]}) 100%`);
   $('score-strip').style.background = `linear-gradient(90deg, ${stops.join(', ')})`;
   // Tick labels on the 6-hour boundaries, located by LOCAL hour so DST days
   // (23/25 columns) label the right spots.
