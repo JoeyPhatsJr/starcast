@@ -5,10 +5,10 @@
 // nodes, so scrubbing the timeline stays cheap. Only day switches and data
 // refreshes rebuild nodes (segments, tabs, charts).
 
-import { scoreMetric, verdict, band, WEIGHTS } from './score.js';
+import { scoreMetric, verdict, band, WEIGHTS, overallScore } from './score.js';
 import { activeShowers, milkyWayPeak, phaseName, kpNeeded } from './tonight.js';
 import { planetNightEvents, julianDate, sunAltitude, skyBodies } from './astro.js';
-import { nightHoursOf, bestWindowIn, dewRiskStart } from './logic.js';
+import { nightHoursOf, bestWindowIn, dewRiskStart, interpolateHours } from './logic.js';
 import {
   project, frameContext, starDrawList, lineDrawList, horizonDrawList, cardinalName, CARDINALS,
 } from './skymap.js';
@@ -58,7 +58,19 @@ export function getSelectedHour(state) {
   const day = state.days[state.selectedDay];
   if (!day || !day.hourIndices.length) return null;
   const pos = Math.min(state.selectedHour, day.hourIndices.length - 1);
-  return state.hours[day.hourIndices[pos]];
+  const gi = day.hourIndices[pos];
+  const a = state.hours[gi];
+  const minute = state.selectedMinute || 0;
+  if (!minute) return a;
+  // Global successor — crosses day/DST boundaries; null at forecast end (clamps).
+  const h = interpolateHours(a, state.hours[gi + 1] || null, minute / 60);
+  h.score = overallScore(h, {
+    bortle: state.prefs.bortle,
+    moonAltitude: h.moonAlt,
+    sunAltitude: h.sunAlt,
+    moonIllum: h.moonIllum,
+  });
+  return h;
 }
 
 /* ================= Star field ================= */
@@ -380,13 +392,23 @@ export function renderTimelineSegments(state) {
   const day = state.days[state.selectedDay];
   if (!day) return;
   const playhead = $('playhead');
-  strip.setAttribute('aria-valuemax', String(day.hourIndices.length - 1));
+  strip.setAttribute('aria-valuemax', String(day.hourIndices.length * 60 - 1));
   for (const idx of day.hourIndices) {
     const h = state.hours[idx];
     const seg = document.createElement('div');
-    seg.className = `seg band-${band(h.score)}${h.isDay === 1 ? ' daylight' : ''}`;
+    seg.className = `seg band-${band(h.score)}`;
     strip.insertBefore(seg, playhead);
   }
+  // Sun-altitude sky gradient: night black → twilight purple → day blue,
+  // fading between hourly stops. Anchors are CSS vars so night mode re-ramps
+  // the whole strip to red without a light leak.
+  const n = day.hourIndices.length;
+  const stops = day.hourIndices.map((idx, i) => {
+    const alt = state.hours[idx].sunAlt;
+    const c = alt >= 0 ? 'var(--sky-dayc)' : alt > -18 ? 'var(--sky-twic)' : 'var(--sky-nightc)';
+    return `${c} ${(((i + 0.5) / n) * 100).toFixed(1)}%`;
+  });
+  strip.style.background = `linear-gradient(90deg, ${stops.join(', ')})`;
   updatePlayhead(state);
 }
 
@@ -395,12 +417,18 @@ export function updatePlayhead(state) {
   if (!day || !day.hourIndices.length) return;
   const n = day.hourIndices.length;
   const pos = Math.min(state.selectedHour, n - 1);
+  const minute = state.selectedMinute || 0;
   const playhead = $('playhead');
-  playhead.style.left = `${((pos + 0.5) / n) * 100}%`;
+  // Exact position: a whole hour sits at its segment's left edge — centering
+  // it would make the playhead jump backward when a drag crosses minute 0.
+  playhead.style.left = `${((pos + minute / 60) / n) * 100}%`;
   playhead.classList.remove('hidden');
-  const h = state.hours[day.hourIndices[pos]];
-  $('timeline-label').textContent = `▾ ${fmtTime(h.time, state.prefs.tz)}`;
-  $('timeline-strip').setAttribute('aria-valuenow', String(pos));
+  const h = getSelectedHour(state);
+  const label = fmtTime(h.time, state.prefs.tz);
+  $('timeline-label').textContent = `▾ ${label}`;
+  const strip = $('timeline-strip');
+  strip.setAttribute('aria-valuenow', String(pos * 60 + minute));
+  strip.setAttribute('aria-valuetext', label);
 }
 
 /* ================= Day tabs ================= */
