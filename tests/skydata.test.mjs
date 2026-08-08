@@ -34,3 +34,16 @@ test('constellation polylines cover the sky and are in range', () => {
     }
   }
 });
+
+test('no two named stars within 0.1° (double-label guard)', () => {
+  const named = sky.stars.filter((s) => s[3]);
+  for (let i = 0; i < named.length; i++) {
+    for (let j = i + 1; j < named.length; j++) {
+      const cosD = Math.cos((named[i][1] * Math.PI) / 180);
+      let dRa = Math.abs(named[i][0] - named[j][0]);
+      if (dRa > 180) dRa = 360 - dRa;
+      const dist = Math.hypot(dRa * cosD, named[i][1] - named[j][1]);
+      assert.ok(dist > 0.1, `"${named[i][3]}" and "${named[j][3]}" are ${dist.toFixed(3)}° apart`);
+    }
+  }
+});
