@@ -100,17 +100,24 @@
         <div id="sky-caption" class="sky-caption"></div>
         <div class="sky-wrap">
           <video id="sky-camera" class="hidden" autoplay muted playsinline></video>
-          <canvas id="sky-canvas"></canvas>
+          <canvas id="sky-canvas" tabindex="0" role="img" aria-label="Interactive star map. Use arrow keys to look around, plus and minus to zoom, Home to face north."></canvas>
           <div id="sky-status" class="sky-status">Loading star catalog…</div>
           <div class="sky-tools">
+            <button id="sky-north-btn" class="sky-tool-btn" type="button" aria-label="Face north and reset zoom">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="12,5 15,13 12,11.4 9,13" fill="currentColor" stroke="none"/></svg>
+            </button>
+            <button id="sky-grid-btn" class="sky-tool-btn" type="button" aria-pressed="false" aria-label="Altitude and azimuth grid">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg>
+            </button>
             <button id="sky-ar-btn" class="sky-tool-btn" type="button" aria-pressed="false">AR</button>
             <button id="sky-cam-btn" class="sky-tool-btn hidden" type="button" aria-pressed="false" aria-label="Camera passthrough">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
             </button>
           </div>
+          <div id="sky-info" class="sky-info hidden" aria-live="polite"></div>
           <div id="sky-toast" class="sky-toast hidden"></div>
         </div>
-        <p class="sky-hint">Drag to look around · pinch or scroll to zoom · time follows the scrubbed hour</p>
+        <p class="sky-hint">Drag to look around · pinch or scroll to zoom · tap a star to identify it · time follows the scrubbed hour</p>
       </section>
 
       <!-- ============ ERROR ============ -->
@@ -239,7 +246,9 @@
         </div>
         <div class="panel">
           <h2>Sky map</h2>
-          <p class="help-p">The Sky tab draws the stars (to magnitude 5), all 88 constellations, the Moon, Sun, and naked-eye planets for the hour you've scrubbed to. Drag to look around; pinch or scroll to zoom. Positions are computed to about a degree — great for finding things by eye, not for pointing a telescope. Star data: <a href="https://www.astronexus.com/hyg" target="_blank" rel="noopener">HYG Database</a> (CC BY-SA 4.0). Constellation lines: <a href="https://github.com/ofrohn/d3-celestial" target="_blank" rel="noopener">d3-celestial</a> (BSD-3-Clause). On a phone, the AR button points the map with your device's motion sensors — headings are corrected from magnetic to true north using the World Magnetic Model (WMM2025, NOAA/NCEI &amp; BGS, public domain), and the camera button shows the live sky behind the stars.</p>
+          <p class="help-p">The Sky tab draws the stars (to magnitude 5, in their real colors), all 88 constellations, the Milky Way, the Moon with its current phase, the Sun, and the naked-eye planets for the hour you've scrubbed to. Drag to look around; pinch or scroll to zoom; <strong>tap any star, planet or the Moon to identify it</strong> — you'll get its name, brightness and constellation. The compass button re-centers on north, and the globe button overlays an altitude/azimuth grid. With a keyboard: arrow keys look around (hold Shift for bigger steps), <kbd>+</kbd>/<kbd>−</kbd> zoom, <kbd>Home</kbd> faces north, <kbd>Esc</kbd> clears the selection.</p>
+          <p class="help-p">The sky itself reacts to conditions: it brightens and warms toward the horizon by how light-polluted your location actually measures, stars dim realistically as they approach the horizon (atmospheric extinction), and the Milky Way fades as your Bortle number rises — it stays faintly drawn even from a city so you can still tell which way it runs. Positions are computed to about a degree — great for finding things by eye, not for pointing a telescope.</p>
+          <p class="help-p">Star data: <a href="https://www.astronexus.com/hyg" target="_blank" rel="noopener">HYG Database</a> (CC BY-SA 4.0). Constellation lines, names and Milky Way outlines: <a href="https://github.com/ofrohn/d3-celestial" target="_blank" rel="noopener">d3-celestial</a> (BSD-3-Clause). On a phone, the AR button points the map with your device's motion sensors — headings are corrected from magnetic to true north using the World Magnetic Model (WMM2025, NOAA/NCEI &amp; BGS, public domain), and the camera button shows the live sky behind the stars.</p>
         </div>
         <div class="panel">
           <h2>Forecast grid &amp; charts</h2>

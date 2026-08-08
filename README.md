@@ -48,6 +48,12 @@ timeline, day tabs for the full 14-day forecast, and 72-hour charts.
 - **Physics-based seeing** — when 7Timer is unreachable, the seeing estimate
   is driven by measured 250/500 hPa upper-air winds (jet-stream shear, the
   real driver of astronomical seeing) rather than surface conditions alone.
+- **Sky map** — a real planetarium view for the scrubbed hour: 1,637 stars in
+  their true colors (from B−V), all 88 constellation figures and names, the
+  Milky Way, the Moon rendered at its actual phase, and the naked-eye planets.
+  Tap anything to identify it. The sky brightens toward the horizon by your
+  measured light pollution, stars dim through atmospheric extinction, and the
+  Milky Way fades as your Bortle number rises.
 - **AR mode** — on phones, the Sky tab can track your device's motion sensors
   (compass corrected to true north via an embedded WMM2025 model) with
   optional camera passthrough.

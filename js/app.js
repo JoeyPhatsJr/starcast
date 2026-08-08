@@ -14,8 +14,11 @@ import { overallScore } from './score.js';
 import { fetchLightPollution } from './lightpollution.js';
 import { fetchKpForecast } from './tonight.js';
 import { parseShareCoords, groupByLocalDate, buildICS, nightCloudMean, shouldAutoEnterAR } from './logic.js';
-import { dragView, zoomView, ALT_MIN, ALT_MAX } from './skymap.js';
-import { orientationToBasis, rotateBasisZ, smoothBasis, basisToView, headingOffset } from './armath.js';
+import { dragView, zoomView, clampView, ALT_MIN, ALT_MAX } from './skymap.js';
+import {
+  orientationToBasis, rotateBasisZ, smoothBasis, basisToView, headingOffset,
+  basisAngleDeg, smoothingAlpha, smoothingTau, updateRate,
+} from './armath.js';
 import { declination, decimalYear } from './wmm.js';
 import * as UI from './ui.js';
 
@@ -29,6 +32,7 @@ const state = {
     bortle: 5, units: 'imperial', // bortle is always the atlas-measured value
     saved: [], night: false, cb: false,
     arAuto: true, // Sky tab enters AR tracking on its own; false after a manual AR-off
+    skyGrid: false, // alt/az grid overlay on the Sky tab
   },
   hours: [],
   days: [],
@@ -47,9 +51,13 @@ const state = {
   offlineData: false, // true when showing the SW's cached fallback
   status: 'loading', // loading | ready | error
   sky: { az: 180, alt: 25, fov: 70 }, // Sky tab view direction/zoom
-  skyData: null, // star/constellation catalog, lazy-fetched on first Sky visit
+  skyData: null, // star/constellation/Milky Way catalog, lazy-fetched on first Sky visit
   skyDataError: false, // true when the last sky.json fetch attempt failed
-  ar: { active: false, camera: false, decl: 0, offset: null, basis: null, lastEventAt: 0 },
+  skyGrid: false, // alt/az grid overlay (mirrors prefs.skyGrid)
+  skySelected: null, // the tapped object, redrawn with a reticle + info card
+  // `target` is the latest sensor basis; `basis` is the displayed one easing
+  // toward it in the rAF loop (see arFrame).
+  ar: { active: false, camera: false, decl: 0, offset: null, basis: null, target: null, lastEventAt: 0 },
 };
 
 let route = 'conditions';
@@ -77,6 +85,8 @@ function loadPrefs() {
     .slice(0, 8);
   if (typeof state.prefs.night !== 'boolean') state.prefs.night = false;
   if (typeof state.prefs.cb !== 'boolean') state.prefs.cb = false;
+  if (typeof state.prefs.skyGrid !== 'boolean') state.prefs.skyGrid = false;
+  state.skyGrid = state.prefs.skyGrid;
   try {
     const t = Number(localStorage.getItem('starcast:lastFetch'));
     if (Number.isFinite(t) && t > 0) state.lastFetch = t;
@@ -86,8 +96,12 @@ function loadPrefs() {
 function savePrefs() {
   try {
     // bortle persists so an offline start reuses the last measured value.
-    const { lat, lon, name, tz, bortle, units, saved, night, cb, arAuto } = state.prefs;
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ lat, lon, name, tz, bortle, units, saved, night, cb, arAuto }));
+    // NOTE: a new pref must be added to BOTH the destructure and the object
+    // below, or it silently fails to persist (this bit us once with arAuto).
+    const { lat, lon, name, tz, bortle, units, saved, night, cb, arAuto, skyGrid } = state.prefs;
+    localStorage.setItem(PREFS_KEY, JSON.stringify({
+      lat, lon, name, tz, bortle, units, saved, night, cb, arAuto, skyGrid,
+    }));
   } catch (e) { /* private mode — prefs just won't persist */ }
 }
 
@@ -886,15 +900,58 @@ function scheduleSkyRender() {
   });
 }
 
+// Free-spin after a flick. Velocity is carried in px/frame of the original
+// drag and decays geometrically; below half a pixel it is imperceptible, so
+// the loop stops rather than burning frames forever.
+let skyGlide = 0;
+const GLIDE_DECAY = 0.93;
+const GLIDE_STOP = 0.4;
+
+function stopGlide() {
+  if (skyGlide) cancelAnimationFrame(skyGlide);
+  skyGlide = 0;
+}
+
+function startGlide(vx, vy, widthPx) {
+  stopGlide();
+  if (Math.hypot(vx, vy) < 2) return;
+  let x = vx;
+  let y = vy;
+  const step = () => {
+    x *= GLIDE_DECAY;
+    y *= GLIDE_DECAY;
+    if (Math.hypot(x, y) < GLIDE_STOP || state.ar.active || route !== 'sky') {
+      skyGlide = 0;
+      return;
+    }
+    state.sky = dragView(state.sky, x, y, widthPx);
+    UI.renderSky(state);
+    skyGlide = requestAnimationFrame(step);
+  };
+  skyGlide = requestAnimationFrame(step);
+}
+
 function wireSky() {
   const canvas = document.getElementById('sky-canvas');
   if (!canvas) return;
   const ptrs = new Map(); // pointerId → last {x, y}
   let lastPinchDist = 0;
+  let downAt = { x: 0, y: 0, t: 0 };
+  let moved = 0; // total px travelled — separates a tap from a drag
+  let vel = { x: 0, y: 0 };
 
   canvas.addEventListener('pointerdown', (e) => {
-    canvas.setPointerCapture(e.pointerId);
+    stopGlide();
+    // Capture can throw (NotFoundError) if the pointer is already gone — and
+    // it always throws for synthetic events, which is what headless UI tests
+    // dispatch. Losing capture only costs us drags that leave the canvas.
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* non-fatal */ }
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.size === 1) {
+      downAt = { x: e.clientX, y: e.clientY, t: Date.now() };
+      moved = 0;
+      vel = { x: 0, y: 0 };
+    }
     if (ptrs.size === 2) {
       const [a, b] = [...ptrs.values()];
       lastPinchDist = Math.hypot(a.x - b.x, a.y - b.y);
@@ -906,9 +963,14 @@ function wireSky() {
     if (!prev) return;
     const cur = { x: e.clientX, y: e.clientY };
     ptrs.set(e.pointerId, cur);
+    const dx = cur.x - prev.x;
+    const dy = cur.y - prev.y;
+    moved += Math.hypot(dx, dy);
     if (ptrs.size === 1) {
       if (state.ar.active) return;
-      state.sky = dragView(state.sky, cur.x - prev.x, cur.y - prev.y, canvas.clientWidth);
+      // Low-pass the velocity so one jittery final sample cannot fling the view.
+      vel = { x: vel.x * 0.6 + dx * 0.4, y: vel.y * 0.6 + dy * 0.4 };
+      state.sky = dragView(state.sky, dx, dy, canvas.clientWidth);
     } else if (ptrs.size === 2) {
       const [a, b] = [...ptrs.values()];
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
@@ -919,8 +981,16 @@ function wireSky() {
   });
 
   const endPtr = (e) => {
+    const wasLast = ptrs.size === 1;
     ptrs.delete(e.pointerId);
     lastPinchDist = 0;
+    if (!wasLast) return;
+    // A short, near-stationary press is a tap: identify whatever is under it.
+    if (moved < 10 && Date.now() - downAt.t < 500 && e.type === 'pointerup') {
+      selectSkyObject(e.clientX, e.clientY);
+    } else if (!state.ar.active) {
+      startGlide(vel.x, vel.y, canvas.clientWidth);
+    }
   };
   canvas.addEventListener('pointerup', endPtr);
   canvas.addEventListener('pointercancel', endPtr);
@@ -929,6 +999,7 @@ function wireSky() {
     'wheel',
     (e) => {
       e.preventDefault();
+      stopGlide();
       // Scale by deltaY magnitude: trackpads send many small deltas, wheel
       // notches ~±100 — exp keeps zoom-in/out symmetric; clamp big jumps.
       state.sky = zoomView(state.sky, Math.min(1.4, Math.max(1 / 1.4, Math.exp(-e.deltaY * 0.0015))));
@@ -937,6 +1008,36 @@ function wireSky() {
     { passive: false }
   );
 
+  canvas.addEventListener('dblclick', (e) => {
+    e.preventDefault();
+    stopGlide();
+    state.sky = zoomView(state.sky, 1.8);
+    scheduleSkyRender();
+  });
+
+  // Keyboard equivalents for everything the pointer can do — the canvas is the
+  // only control on this tab, so without these it is unusable without a mouse.
+  canvas.addEventListener('keydown', (e) => {
+    const step = e.shiftKey ? 15 : 5;
+    let handled = true;
+    switch (e.key) {
+      case 'ArrowLeft': state.sky = clampView({ ...state.sky, az: state.sky.az - step }); break;
+      case 'ArrowRight': state.sky = clampView({ ...state.sky, az: state.sky.az + step }); break;
+      case 'ArrowUp': state.sky = clampView({ ...state.sky, alt: state.sky.alt + step }); break;
+      case 'ArrowDown': state.sky = clampView({ ...state.sky, alt: state.sky.alt - step }); break;
+      case '+': case '=': state.sky = zoomView(state.sky, 1.25); break;
+      case '-': case '_': state.sky = zoomView(state.sky, 1 / 1.25); break;
+      case 'Home': state.sky = { az: 0, alt: 25, fov: 70 }; break;
+      case 'Escape': state.skySelected = null; break;
+      default: handled = false;
+    }
+    if (!handled) return;
+    e.preventDefault();
+    stopGlide();
+    if (state.ar.active) exitAR(); // a manual look-around implies leaving AR
+    scheduleSkyRender();
+  });
+
   let skyResizeTimer = 0;
   window.addEventListener('resize', () => {
     clearTimeout(skyResizeTimer);
@@ -944,6 +1045,42 @@ function wireSky() {
       if (route === 'sky') UI.renderSky(state);
     }, 150);
   });
+}
+
+/** Tap-to-identify: pick whatever was rendered under the point, or clear. */
+function selectSkyObject(clientX, clientY) {
+  const hit = UI.pickSky(clientX, clientY);
+  state.skySelected = hit || null;
+  scheduleSkyRender();
+}
+
+function wireSkyTools() {
+  const north = document.getElementById('sky-north-btn');
+  if (north) {
+    north.addEventListener('click', () => {
+      stopGlide();
+      if (state.ar.active) exitAR();
+      state.sky = { az: 0, alt: 25, fov: 70 };
+      scheduleSkyRender();
+    });
+  }
+  const grid = document.getElementById('sky-grid-btn');
+  if (grid) {
+    grid.addEventListener('click', () => {
+      state.skyGrid = !state.skyGrid;
+      state.prefs.skyGrid = state.skyGrid;
+      savePrefs();
+      scheduleSkyRender();
+    });
+  }
+  const info = document.getElementById('sky-info');
+  if (info) {
+    info.addEventListener('click', (e) => {
+      if (!e.target.closest('.sky-info-close')) return;
+      state.skySelected = null;
+      scheduleSkyRender();
+    });
+  }
 }
 
 // --- AR mode ---------------------------------------------------------------
@@ -965,7 +1102,16 @@ function screenAngle() {
 
 let arHasAbsolute = false;
 let arSensorTimer = 0;
+let arRaf = 0;
+let arLastSensorMs = 0;
+let arLastFrameMs = 0;
+let arRate = null; // fixed-window angular-rate tracker (see armath.updateRate)
+let arSpeed = 0; // smoothed sensor angular rate, deg/s — drives the adaptive filter
+let arSensorPeriod = 0; // smoothed ms between sensor events — floors the time constant
 
+// A sensor event only updates the TARGET; a continuous rAF loop eases the
+// displayed basis toward it and redraws. Rendering straight off the sensor
+// stream made the view step visibly on devices that emit 15–20 events/sec.
 function onOrientation(e) {
   if (!state.ar.active || e.alpha === null || e.alpha === undefined) return;
   // Prefer absolute events; once one arrives, ignore the relative stream.
@@ -973,24 +1119,51 @@ function onOrientation(e) {
   if (isAbsolute) arHasAbsolute = true;
   else if (arHasAbsolute) return;
 
-  state.ar.lastEventAt = Date.now();
+  const now = performance.now();
+  const dt = arLastSensorMs ? Math.min(250, now - arLastSensorMs) : 16;
+  arLastSensorMs = now;
+  state.ar.lastEventAt = Date.now(); // liveness flag for the no-sensor timeout
 
   const raw = orientationToBasis(e.alpha, e.beta, e.gamma, screenAngle());
   let headingFix = state.ar.decl; // magnetic → true north
   if (!isAbsolute && typeof e.webkitCompassHeading === 'number' && e.webkitCompassHeading >= 0) {
     // iOS: fuse the absolute (noisy) compass with the smooth (relative) gyro
-    // alpha — but compass headings are garbage when the phone points near the
-    // zenith, so freeze the fused offset there and coast on the gyro.
-    // f[2] = sin(view altitude); 0.87 ≈ alt 60°.
-    if (raw.f[2] < 0.87) {
-      state.ar.offset = headingOffset(state.ar.offset, e.alpha, e.webkitCompassHeading, 0.05);
+    // alpha. Compass headings are garbage when the phone points near the
+    // zenith, so the fusion gain FADES OUT between ~44° and ~60° of view
+    // altitude rather than switching off at a hard threshold — a hard cut put
+    // a visible jump in the pan exactly where people tilt up to look at stars.
+    // f[2] = sin(view altitude): 0.695 ≈ 44°, 0.87 ≈ 60°.
+    const fade = Math.max(0, Math.min(1, (0.87 - raw.f[2]) / 0.175));
+    if (fade > 0) {
+      const k = smoothingAlpha(dt, 700) * fade; // ~0.7s compass time constant
+      state.ar.offset = headingOffset(state.ar.offset, e.alpha, e.webkitCompassHeading, k);
     }
     if (state.ar.offset !== null) headingFix -= state.ar.offset; // alpha+offset ≡ az−offset
   }
+
+  const target = rotateBasisZ(raw, headingFix);
+  // Track how fast the phone is actually turning; the filter uses it to trade
+  // smoothness against lag (see adaptiveTau). Measured over a fixed window so
+  // the answer does not depend on the device's event rate.
+  arRate = updateRate(arRate, target, dt);
+  arSpeed += (arRate.rate - arSpeed) * smoothingAlpha(dt, 150);
+  arSensorPeriod = arSensorPeriod ? arSensorPeriod + (dt - arSensorPeriod) * 0.2 : dt;
+  state.ar.target = target;
+  if (!state.ar.basis) state.ar.basis = target; // snap on the first sample
+  startArLoop();
+}
+
+function arFrame(now) {
+  arRaf = 0;
+  if (!state.ar.active || !state.ar.target) return;
+  const dt = arLastFrameMs ? Math.min(120, now - arLastFrameMs) : 16;
+  arLastFrameMs = now;
+
   // Smooth the rigid basis, not az/alt/roll separately — the decomposed
   // angles spin wildly (but in compensating ways) near the zenith, and
   // independent smoothing breaks the compensation (field bug 2026-08-03).
-  state.ar.basis = smoothBasis(state.ar.basis, rotateBasisZ(raw, headingFix), 0.25);
+  const k = smoothingAlpha(dt, smoothingTau(arSpeed, arSensorPeriod));
+  state.ar.basis = smoothBasis(state.ar.basis, state.ar.target, k);
   const v = basisToView(state.ar.basis);
   state.sky = {
     az: v.az,
@@ -998,7 +1171,31 @@ function onOrientation(e) {
     fov: state.sky.fov,
     roll: v.roll,
   };
-  scheduleSkyRender();
+  UI.renderSky(state);
+
+  // Park the loop once the displayed basis has caught up with the sensor and
+  // the phone is holding still — a phone on a table should not pin a core.
+  if (basisAngleDeg(state.ar.basis, state.ar.target) < 0.02 && arSpeed < 0.5) {
+    arLastFrameMs = 0;
+    return;
+  }
+  arRaf = requestAnimationFrame(arFrame);
+}
+
+function startArLoop() {
+  if (arRaf || !state.ar.active) return;
+  arLastFrameMs = 0;
+  arRaf = requestAnimationFrame(arFrame);
+}
+
+function stopArLoop() {
+  if (arRaf) cancelAnimationFrame(arRaf);
+  arRaf = 0;
+  arLastFrameMs = 0;
+  arLastSensorMs = 0;
+  arRate = null;
+  arSpeed = 0;
+  arSensorPeriod = 0;
 }
 
 function enterAR(auto = false) {
@@ -1006,8 +1203,11 @@ function enterAR(auto = false) {
     state.ar.active = true;
     state.ar.offset = null;
     state.ar.basis = null;
+    state.ar.target = null;
     state.ar.lastEventAt = 0;
     arHasAbsolute = false;
+    stopGlide(); // a leftover flick must not fight the sensors
+    stopArLoop();
     state.ar.decl = declination(state.prefs.lat, state.prefs.lon, decimalYear(new Date()));
     window.addEventListener('deviceorientationabsolute', onOrientation, true);
     window.addEventListener('deviceorientation', onOrientation, true);
@@ -1107,6 +1307,11 @@ function exitAR() {
   window.removeEventListener('deviceorientation', onOrientation, true);
   stopCamera();
   state.ar.active = false;
+  // Order matters: clear `active` first so an in-flight arFrame bails out,
+  // then cancel the pending frame.
+  stopArLoop();
+  state.ar.basis = null;
+  state.ar.target = null;
   delete state.sky.roll;
   UI.renderSky(state);
 }
@@ -1230,6 +1435,7 @@ function init() {
   wireAppearance();
   wireMisc();
   wireSky();
+  wireSkyTools();
   wireAR();
   boot();
 
